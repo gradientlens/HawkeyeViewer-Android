@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(./gradlew :libusbcamera:dependencies:*)",
+      "Bash(./gradlew build:*)",
+      "Bash(./gradlew clean build:*)",
+      "Bash(./gradlew :app:compileMobileDebugKotlin:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

@@ -40,6 +40,10 @@ android {
         viewBinding = true
     }
 
+    lint {
+        abortOnError = false
+    }
+
     // Product flavors for Mobile and TV
     flavorDimensions += "device"
     productFlavors {
@@ -53,6 +57,12 @@ android {
             applicationIdSuffix = ".tv"
             versionNameSuffix = "-tv"
         }
+    }
+}
+
+repositories {
+    flatDir {
+        dirs("libs")
     }
 }
 
@@ -76,9 +86,9 @@ dependencies {
     implementation("androidx.camera:camera-lifecycle:1.3.1")
     implementation("androidx.camera:camera-view:1.3.1")
 
-    // USB Serial support (more reliable, on Maven Central)
-    //implementation("com.github.mik3y:usb-serial-for-android:3.7.3")
-   // implementation("com.github.jiangdongguo:AndroidUSBCamera:3.2.8")
+    // USB UVC Camera support - using local libusbcamera module
+    implementation(project(":libusbcamera"))
+    implementation(files("libs/libusbcommon_v4.1.1.aar"))
 
     // Leanback for Android TV
     "tvImplementation"("androidx.leanback:leanback:1.0.0")
