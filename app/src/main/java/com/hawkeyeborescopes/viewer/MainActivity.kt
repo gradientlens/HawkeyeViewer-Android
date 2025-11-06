@@ -179,11 +179,13 @@ class MainActivity : AppCompatActivity(), CameraViewInterface.Callback {
 
         // Settings button toggles control panel
         binding.settingsButton.setOnClickListener {
-            binding.controlsPanel.visibility = if (binding.controlsPanel.visibility == View.VISIBLE) {
+            val newVisibility = if (binding.controlsPanel.visibility == View.VISIBLE) {
                 View.GONE
             } else {
                 View.VISIBLE
             }
+            binding.controlsPanel.visibility = newVisibility
+            writeLog("Settings panel visibility changed to: $newVisibility")
         }
 
         // Start camera button
@@ -221,10 +223,17 @@ class MainActivity : AppCompatActivity(), CameraViewInterface.Callback {
 
         // Brightness control
         binding.brightnessSeekBar.max = 100
+        binding.brightnessSeekBar.progress = 50
         binding.brightnessSeekBar.setOnSeekBarChangeListener(object : android.widget.SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(seekBar: android.widget.SeekBar?, progress: Int, fromUser: Boolean) {
-                if (cameraHelper != null && cameraHelper!!.isCameraOpened) {
-                    cameraHelper?.setModelValue(UVCCameraHelper.MODE_BRIGHTNESS, progress)
+                if (fromUser && cameraHelper != null && cameraHelper!!.isCameraOpened) {
+                    writeLog("Setting brightness to: $progress")
+                    try {
+                        cameraHelper?.setModelValue(UVCCameraHelper.MODE_BRIGHTNESS, progress)
+                        writeLog("Brightness set successfully")
+                    } catch (e: Exception) {
+                        writeLog("Failed to set brightness: ${e.message}")
+                    }
                 }
             }
             override fun onStartTrackingTouch(seekBar: android.widget.SeekBar?) {}
@@ -233,10 +242,17 @@ class MainActivity : AppCompatActivity(), CameraViewInterface.Callback {
 
         // Contrast control
         binding.contrastSeekBar.max = 100
+        binding.contrastSeekBar.progress = 50
         binding.contrastSeekBar.setOnSeekBarChangeListener(object : android.widget.SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(seekBar: android.widget.SeekBar?, progress: Int, fromUser: Boolean) {
-                if (cameraHelper != null && cameraHelper!!.isCameraOpened) {
-                    cameraHelper?.setModelValue(UVCCameraHelper.MODE_CONTRAST, progress)
+                if (fromUser && cameraHelper != null && cameraHelper!!.isCameraOpened) {
+                    writeLog("Setting contrast to: $progress")
+                    try {
+                        cameraHelper?.setModelValue(UVCCameraHelper.MODE_CONTRAST, progress)
+                        writeLog("Contrast set successfully")
+                    } catch (e: Exception) {
+                        writeLog("Failed to set contrast: ${e.message}")
+                    }
                 }
             }
             override fun onStartTrackingTouch(seekBar: android.widget.SeekBar?) {}
