@@ -4,6 +4,7 @@ import android.Manifest
 import android.content.pm.PackageManager
 import android.hardware.usb.UsbDevice
 import android.os.Bundle
+import android.os.Environment
 import android.util.Log
 import android.view.Surface
 import android.view.View
@@ -14,6 +15,11 @@ import androidx.core.content.ContextCompat
 import com.hawkeyeborescopes.viewer.databinding.ActivityMainBinding
 import com.jiangdg.usbcamera.UVCCameraHelper
 import com.serenegiant.usb.widget.CameraViewInterface
+import java.io.File
+import java.io.FileWriter
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 class MainActivity : AppCompatActivity(), CameraViewInterface.Callback {
 
@@ -25,6 +31,19 @@ class MainActivity : AppCompatActivity(), CameraViewInterface.Callback {
     companion object {
         private const val TAG = "HawkeyeCamera"
         private const val REQUEST_PERMISSION = 1
+    }
+
+    private fun writeLog(message: String) {
+        try {
+            Log.d(TAG, message)
+            val timestamp = SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", Locale.US).format(Date())
+            val logFile = File(getExternalFilesDir(null), "hawkeye_debug.log")
+            FileWriter(logFile, true).use { writer ->
+                writer.appendLine("[$timestamp] $message")
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to write log", e)
+        }
     }
 
     private val deviceConnectListener = object : UVCCameraHelper.OnMyDevConnectListener {
@@ -69,40 +88,88 @@ class MainActivity : AppCompatActivity(), CameraViewInterface.Callback {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        try {
-            binding = ActivityMainBinding.inflate(layoutInflater)
-            setContentView(binding.root)
+        writeLog("=== APP STARTING ===")
+        writeLog("onCreate called")
 
+        try {
+            writeLog("Inflating layout...")
+            binding = ActivityMainBinding.inflate(layoutInflater)
+            writeLog("Layout inflated successfully")
+
+            writeLog("Setting content view...")
+            setContentView(binding.root)
+            writeLog("Content view set successfully")
+
+            writeLog("Setting up UI...")
             setupUI()
+            writeLog("UI setup complete")
+
+            writeLog("Checking permissions...")
             checkPermissions()
+            writeLog("Permission check complete")
+
+            writeLog("Initializing camera...")
             initializeCamera()
+            writeLog("Camera initialization complete")
 
             // Handle USB device attached intent
             if (intent?.action == android.hardware.usb.UsbManager.ACTION_USB_DEVICE_ATTACHED) {
+                writeLog("USB device attached intent detected")
                 showStatus("USB device detected - Initializing...")
             }
+
+            writeLog("onCreate completed successfully")
+            Toast.makeText(this, "App started. Log file: ${getExternalFilesDir(null)}/hawkeye_debug.log", Toast.LENGTH_LONG).show()
         } catch (e: Exception) {
-            showStatus("Error initializing: ${e.message}")
+            writeLog("FATAL ERROR in onCreate: ${e.message}")
+            writeLog("Stack trace: ${e.stackTraceToString()}")
+            Toast.makeText(this, "Error: ${e.message}. Check log at ${getExternalFilesDir(null)}/hawkeye_debug.log", Toast.LENGTH_LONG).show()
             e.printStackTrace()
+
+            // Don't crash - show error screen
+            try {
+                setContentView(android.R.layout.simple_list_item_1)
+            } catch (ignore: Exception) {}
         }
     }
 
     private fun initializeCamera() {
         try {
-            Log.d(TAG, "Initializing camera...")
-            val cameraView = binding.cameraView as CameraViewInterface
+            writeLog("Getting camera view...")
+            val cameraView = binding.cameraView as? CameraViewInterface
+            if (cameraView == null) {
+                writeLog("ERROR: Camera view is null!")
+                throw Exception("Camera view cast failed")
+            }
+            writeLog("Camera view obtained successfully")
+
+            writeLog("Setting camera callback...")
             cameraView.setCallback(this)
+            writeLog("Camera callback set")
 
+            writeLog("Getting UVCCameraHelper instance...")
             cameraHelper = UVCCameraHelper.getInstance()
-            cameraHelper?.setDefaultFrameFormat(UVCCameraHelper.FRAME_FORMAT_MJPEG)
-            cameraHelper?.initUSBMonitor(this, cameraView, deviceConnectListener)
+            if (cameraHelper == null) {
+                writeLog("ERROR: UVCCameraHelper.getInstance() returned null!")
+                throw Exception("UVCCameraHelper is null")
+            }
+            writeLog("UVCCameraHelper instance obtained")
 
-            Log.d(TAG, "Camera initialized successfully")
-            showStatus("Camera initialized - Connect USB camera")
+            writeLog("Setting frame format to MJPEG...")
+            cameraHelper?.setDefaultFrameFormat(UVCCameraHelper.FRAME_FORMAT_MJPEG)
+            writeLog("Frame format set")
+
+            writeLog("Initializing USB monitor...")
+            cameraHelper?.initUSBMonitor(this, cameraView, deviceConnectListener)
+            writeLog("USB monitor initialized")
+
+            writeLog("Camera initialized successfully!")
+            showStatus("Ready - Connect USB camera")
         } catch (e: Exception) {
-            Log.e(TAG, "Error initializing camera", e)
-            showStatus("Error initializing camera: ${e.message}")
-            Toast.makeText(this, "Camera initialization failed: ${e.message}", Toast.LENGTH_LONG).show()
+            writeLog("ERROR in initializeCamera: ${e.message}")
+            writeLog("Stack trace: ${e.stackTraceToString()}")
+            showStatus("Camera init failed: ${e.message}")
+            Toast.makeText(this, "Camera failed: ${e.message}", Toast.LENGTH_LONG).show()
         }
     }
 

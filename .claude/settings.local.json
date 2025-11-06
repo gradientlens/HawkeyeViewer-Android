@@ -6,7 +6,8 @@
       "Bash(./gradlew clean build:*)",
       "Bash(./gradlew :app:compileMobileDebugKotlin:*)",
       "Bash(git add:*)",
-      "Bash(git commit:*)"
+      "Bash(git commit:*)",
+      "Bash(./gradlew assembleMobileDebug:*)"
     ],
     "deny": [],
     "ask": []
