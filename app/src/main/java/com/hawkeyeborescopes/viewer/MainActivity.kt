@@ -4,8 +4,10 @@ import android.Manifest
 import android.content.pm.PackageManager
 import android.hardware.usb.UsbDevice
 import android.os.Bundle
+import android.util.Log
 import android.view.Surface
 import android.view.View
+import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
@@ -21,19 +23,23 @@ class MainActivity : AppCompatActivity(), CameraViewInterface.Callback {
     private var isPreview = false
 
     companion object {
+        private const val TAG = "HawkeyeCamera"
         private const val REQUEST_PERMISSION = 1
     }
 
     private val deviceConnectListener = object : UVCCameraHelper.OnMyDevConnectListener {
         override fun onAttachDev(device: UsbDevice?) {
+            Log.d(TAG, "USB device attached: ${device?.deviceName}")
             showStatus("USB device attached: ${device?.deviceName}")
             if (!isRequest) {
                 isRequest = true
+                Log.d(TAG, "Requesting USB permission")
                 cameraHelper?.requestPermission(0)
             }
         }
 
         override fun onDettachDev(device: UsbDevice?) {
+            Log.d(TAG, "USB device detached")
             showStatus("USB device detached")
             if (isRequest) {
                 isRequest = false
@@ -43,15 +49,19 @@ class MainActivity : AppCompatActivity(), CameraViewInterface.Callback {
 
         override fun onConnectDev(device: UsbDevice?, isConnected: Boolean) {
             if (!isConnected) {
+                Log.e(TAG, "Failed to connect camera")
                 showStatus("Failed to connect. Check resolution params")
+                Toast.makeText(this@MainActivity, "Camera connection failed", Toast.LENGTH_LONG).show()
                 isPreview = false
             } else {
+                Log.d(TAG, "Camera connected successfully")
                 isPreview = true
                 showStatus("Camera connected successfully")
             }
         }
 
         override fun onDisConnectDev(device: UsbDevice?) {
+            Log.d(TAG, "Camera disconnected")
             showStatus("Camera disconnected")
             isPreview = false
         }
@@ -59,23 +69,41 @@ class MainActivity : AppCompatActivity(), CameraViewInterface.Callback {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        binding = ActivityMainBinding.inflate(layoutInflater)
-        setContentView(binding.root)
+        try {
+            binding = ActivityMainBinding.inflate(layoutInflater)
+            setContentView(binding.root)
 
-        setupUI()
-        checkPermissions()
-        initializeCamera()
+            setupUI()
+            checkPermissions()
+            initializeCamera()
+
+            // Handle USB device attached intent
+            if (intent?.action == android.hardware.usb.UsbManager.ACTION_USB_DEVICE_ATTACHED) {
+                showStatus("USB device detected - Initializing...")
+            }
+        } catch (e: Exception) {
+            showStatus("Error initializing: ${e.message}")
+            e.printStackTrace()
+        }
     }
 
     private fun initializeCamera() {
-        val cameraView = binding.cameraView as CameraViewInterface
-        cameraView.setCallback(this)
+        try {
+            Log.d(TAG, "Initializing camera...")
+            val cameraView = binding.cameraView as CameraViewInterface
+            cameraView.setCallback(this)
 
-        cameraHelper = UVCCameraHelper.getInstance()
-        cameraHelper?.setDefaultFrameFormat(UVCCameraHelper.FRAME_FORMAT_MJPEG)
-        cameraHelper?.initUSBMonitor(this, cameraView, deviceConnectListener)
+            cameraHelper = UVCCameraHelper.getInstance()
+            cameraHelper?.setDefaultFrameFormat(UVCCameraHelper.FRAME_FORMAT_MJPEG)
+            cameraHelper?.initUSBMonitor(this, cameraView, deviceConnectListener)
 
-        showStatus("Camera initialized - Connect USB camera")
+            Log.d(TAG, "Camera initialized successfully")
+            showStatus("Camera initialized - Connect USB camera")
+        } catch (e: Exception) {
+            Log.e(TAG, "Error initializing camera", e)
+            showStatus("Error initializing camera: ${e.message}")
+            Toast.makeText(this, "Camera initialization failed: ${e.message}", Toast.LENGTH_LONG).show()
+        }
     }
 
     private fun setupUI() {
@@ -168,10 +196,19 @@ class MainActivity : AppCompatActivity(), CameraViewInterface.Callback {
             permissions.add(Manifest.permission.CAMERA)
         }
 
+        // Storage permissions for Android 12 and below
         if (android.os.Build.VERSION.SDK_INT <= android.os.Build.VERSION_CODES.S_V2) {
             if (ContextCompat.checkSelfPermission(this, Manifest.permission.WRITE_EXTERNAL_STORAGE)
                 != PackageManager.PERMISSION_GRANTED) {
                 permissions.add(Manifest.permission.WRITE_EXTERNAL_STORAGE)
+            }
+        }
+
+        // Notification permission for Android 13+
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)
+                != PackageManager.PERMISSION_GRANTED) {
+                permissions.add(Manifest.permission.POST_NOTIFICATIONS)
             }
         }
 
@@ -236,10 +273,20 @@ class MainActivity : AppCompatActivity(), CameraViewInterface.Callback {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         when (requestCode) {
             REQUEST_PERMISSION -> {
-                if (grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                val granted = grantResults.isNotEmpty() && grantResults.all { it == PackageManager.PERMISSION_GRANTED }
+                if (granted) {
+                    Log.d(TAG, "All permissions granted")
                     showStatus("Permissions granted")
                 } else {
-                    showStatus("Permissions required")
+                    Log.w(TAG, "Some permissions denied")
+                    showStatus("Some permissions denied - app may not work correctly")
+                    Toast.makeText(this, "Please grant all permissions for full functionality", Toast.LENGTH_LONG).show()
+                }
+
+                // Log individual permission results
+                permissions.forEachIndexed { index, permission ->
+                    val result = if (grantResults[index] == PackageManager.PERMISSION_GRANTED) "granted" else "denied"
+                    Log.d(TAG, "Permission $permission: $result")
                 }
             }
         }

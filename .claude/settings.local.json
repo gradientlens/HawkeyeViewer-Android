@@ -4,7 +4,9 @@
       "Bash(./gradlew :libusbcamera:dependencies:*)",
       "Bash(./gradlew build:*)",
       "Bash(./gradlew clean build:*)",
-      "Bash(./gradlew :app:compileMobileDebugKotlin:*)"
+      "Bash(./gradlew :app:compileMobileDebugKotlin:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)"
     ],
     "deny": [],
     "ask": []
