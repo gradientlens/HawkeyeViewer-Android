@@ -8,171 +8,37 @@
     android:background="@color/background_dark"
     tools:context=".MainActivity">
 
-    <!-- Camera Preview Surface - UVC Camera TextureView -->
-    <com.serenegiant.usb.widget.UVCCameraTextureView
-        android:id="@+id/cameraView"
+    <!-- Camera Preview Container - libausbc dynamically adds its TextureView here -->
+    <!-- dimensionRatio constrains to 4:3 matching the 640x480 camera output -->
+    <FrameLayout
+        android:id="@+id/cameraContainer"
         android:layout_width="0dp"
         android:layout_height="0dp"
-        app:layout_constraintTop_toTopOf="parent"
+        android:background="#000000"
+        app:layout_constraintDimensionRatio="1:1"
+        app:layout_constraintTop_toBottomOf="@id/topBar"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toStartOf="@+id/controlsPanel" />
+        app:layout_constraintEnd_toEndOf="parent" />
 
-    <!-- Control Panel (Drawer) -->
-    <LinearLayout
-        android:id="@+id/controlsPanel"
-        android:layout_width="320dp"
-        android:layout_height="0dp"
-        android:orientation="vertical"
-        android:padding="16dp"
-        android:background="@color/surface_dark"
-        app:layout_constraintTop_toTopOf="parent"
-        app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintEnd_toEndOf="parent"
-        android:visibility="gone">
-
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="Camera Controls"
-            android:textColor="@color/text_secondary"
-            android:textSize="16sp"
-            android:textStyle="bold"
-            android:paddingBottom="16dp" />
-
-        <ScrollView
-            android:layout_width="match_parent"
-            android:layout_height="0dp"
-            android:layout_weight="1">
-
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="vertical">
-
-                <!-- Camera Selection -->
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="Device"
-                    android:textColor="@color/text_secondary"
-                    android:textSize="12sp"
-                    android:paddingTop="8dp" />
-
-                <Spinner
-                    android:id="@+id/cameraSpinner"
-                    android:layout_width="match_parent"
-                    android:layout_height="48dp"
-                    android:background="@color/surface_elevated"
-                    android:padding="8dp" />
-
-                <!-- View Mode -->
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="View"
-                    android:textColor="@color/text_secondary"
-                    android:textSize="12sp"
-                    android:paddingTop="16dp" />
-
-                <Spinner
-                    android:id="@+id/viewModeSpinner"
-                    android:layout_width="match_parent"
-                    android:layout_height="48dp"
-                    android:background="@color/surface_elevated"
-                    android:padding="8dp" />
-
-                <!-- Brightness -->
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="@string/brightness"
-                    android:textColor="@color/text_secondary"
-                    android:textSize="12sp"
-                    android:paddingTop="16dp" />
-
-                <SeekBar
-                    android:id="@+id/brightnessSeekBar"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:max="200"
-                    android:progress="100" />
-
-                <!-- Contrast -->
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="@string/contrast"
-                    android:textColor="@color/text_secondary"
-                    android:textSize="12sp"
-                    android:paddingTop="16dp" />
-
-                <SeekBar
-                    android:id="@+id/contrastSeekBar"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:max="200"
-                    android:progress="100" />
-
-                <!-- Saturation -->
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="@string/saturation"
-                    android:textColor="@color/text_secondary"
-                    android:textSize="12sp"
-                    android:paddingTop="16dp" />
-
-                <SeekBar
-                    android:id="@+id/saturationSeekBar"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:max="300"
-                    android:progress="100" />
-
-            </LinearLayout>
-        </ScrollView>
-
-        <!-- Action Buttons -->
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:gravity="center"
-            android:paddingTop="16dp">
-
-            <Button
-                android:id="@+id/startButton"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="@string/btn_start"
-                android:layout_marginEnd="8dp" />
-
-            <Button
-                android:id="@+id/stopButton"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="@string/btn_stop" />
-        </LinearLayout>
-
-    </LinearLayout>
-
-    <!-- Top Control Bar -->
+    <!-- Top Header Bar -->
     <LinearLayout
         android:id="@+id/topBar"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
         android:orientation="horizontal"
-        android:padding="16dp"
+        android:paddingHorizontal="16dp"
+        android:paddingVertical="8dp"
         android:gravity="center_vertical"
         android:background="@color/surface_dark"
+        android:elevation="8dp"
         app:layout_constraintTop_toTopOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent">
 
+        <!-- App Title -->
         <TextView
+            android:id="@+id/appTitle"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
@@ -181,26 +47,557 @@
             android:textSize="18sp"
             android:textStyle="bold" />
 
-        <Button
-            android:id="@+id/captureButton"
+        <!-- Icon Buttons Container -->
+        <LinearLayout
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="@string/btn_capture"
-            android:layout_marginEnd="8dp" />
+            android:orientation="horizontal"
+            android:gravity="center">
 
-        <Button
-            android:id="@+id/recordButton"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="@string/btn_record"
-            android:layout_marginEnd="8dp" />
+            <!-- Still/Capture Button -->
+            <LinearLayout
+                android:id="@+id/captureButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:gravity="center"
+                android:padding="8dp"
+                android:minWidth="72dp"
+                android:background="@drawable/bg_icon_button"
+                android:clickable="true"
+                android:focusable="true">
 
-        <Button
-            android:id="@+id/settingsButton"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="@string/btn_settings" />
+                <ImageView
+                    android:id="@+id/captureIcon"
+                    android:layout_width="28dp"
+                    android:layout_height="28dp"
+                    android:src="@drawable/ic_camera"
+                    app:tint="@color/text_secondary"
+                    android:contentDescription="@string/btn_still" />
 
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/btn_still"
+                    android:textColor="@color/text_secondary"
+                    android:textSize="11sp"
+                    android:textAllCaps="true"
+                    android:layout_marginTop="4dp" />
+            </LinearLayout>
+
+            <!-- Video/Record Button -->
+            <LinearLayout
+                android:id="@+id/recordButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:gravity="center"
+                android:padding="8dp"
+                android:minWidth="72dp"
+                android:layout_marginStart="4dp"
+                android:background="@drawable/bg_icon_button"
+                android:clickable="true"
+                android:focusable="true">
+
+                <ImageView
+                    android:id="@+id/recordIcon"
+                    android:layout_width="28dp"
+                    android:layout_height="28dp"
+                    android:src="@drawable/ic_videocam"
+                    app:tint="@color/text_secondary"
+                    android:contentDescription="@string/btn_video" />
+
+                <TextView
+                    android:id="@+id/recordLabel"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/btn_video"
+                    android:textColor="@color/text_secondary"
+                    android:textSize="11sp"
+                    android:textAllCaps="true"
+                    android:layout_marginTop="4dp" />
+            </LinearLayout>
+
+            <!-- Adjust/Settings Button -->
+            <LinearLayout
+                android:id="@+id/settingsButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:gravity="center"
+                android:padding="8dp"
+                android:minWidth="72dp"
+                android:layout_marginStart="4dp"
+                android:background="@drawable/bg_icon_button"
+                android:clickable="true"
+                android:focusable="true">
+
+                <ImageView
+                    android:id="@+id/settingsIcon"
+                    android:layout_width="28dp"
+                    android:layout_height="28dp"
+                    android:src="@drawable/ic_tune"
+                    app:tint="@color/text_secondary"
+                    android:contentDescription="@string/btn_adjust" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/btn_adjust"
+                    android:textColor="@color/text_secondary"
+                    android:textSize="11sp"
+                    android:textAllCaps="true"
+                    android:layout_marginTop="4dp" />
+            </LinearLayout>
+
+        </LinearLayout>
+    </LinearLayout>
+
+    <!-- Control Panel (Drawer) - Overlays on right side -->
+    <LinearLayout
+        android:id="@+id/controlsPanel"
+        android:layout_width="340dp"
+        android:layout_height="0dp"
+        android:orientation="vertical"
+        android:background="@color/surface_dark"
+        android:elevation="8dp"
+        app:layout_constraintTop_toBottomOf="@id/topBar"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        android:visibility="gone">
+
+        <ScrollView
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1"
+            android:fillViewport="true">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical">
+
+                <!-- CAMERA Section -->
+                <LinearLayout
+                    android:id="@+id/cameraSectionHeader"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:padding="14dp"
+                    android:background="@drawable/bg_section_header"
+                    android:clickable="true"
+                    android:focusable="true">
+
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="@string/section_camera"
+                        android:textColor="@color/text_secondary"
+                        android:textSize="13sp"
+                        android:textStyle="bold"
+                        android:letterSpacing="0.03" />
+
+                    <ImageView
+                        android:id="@+id/cameraSectionChevron"
+                        android:layout_width="20dp"
+                        android:layout_height="20dp"
+                        android:src="@drawable/ic_chevron_down"
+                        app:tint="@color/text_secondary" />
+                </LinearLayout>
+
+                <View
+                    android:layout_width="match_parent"
+                    android:layout_height="1dp"
+                    android:background="@color/border_dark" />
+
+                <LinearLayout
+                    android:id="@+id/cameraSectionContent"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:padding="14dp">
+
+                    <!-- View Mode -->
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/label_view"
+                        android:textColor="@color/text_secondary"
+                        android:textSize="12sp" />
+
+                    <Spinner
+                        android:id="@+id/viewModeSpinner"
+                        android:layout_width="match_parent"
+                        android:layout_height="44dp"
+                        android:layout_marginTop="6dp"
+                        android:background="@drawable/bg_spinner" />
+
+                    <!-- Start/Stop Buttons -->
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:layout_marginTop="14dp">
+
+                        <Button
+                            android:id="@+id/startButton"
+                            android:layout_width="0dp"
+                            android:layout_height="44dp"
+                            android:layout_weight="1"
+                            android:text="@string/btn_start"
+                            android:textColor="@color/text_primary"
+                            android:background="@drawable/bg_control_button"
+                            android:layout_marginEnd="8dp" />
+
+                        <Button
+                            android:id="@+id/stopButton"
+                            android:layout_width="0dp"
+                            android:layout_height="44dp"
+                            android:layout_weight="1"
+                            android:text="@string/btn_stop"
+                            android:textColor="@color/text_primary"
+                            android:background="@drawable/bg_control_button" />
+                    </LinearLayout>
+                </LinearLayout>
+
+                <!-- IMAGE Section -->
+                <LinearLayout
+                    android:id="@+id/imageSectionHeader"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:padding="14dp"
+                    android:background="@drawable/bg_section_header"
+                    android:clickable="true"
+                    android:focusable="true">
+
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="@string/section_image"
+                        android:textColor="@color/text_secondary"
+                        android:textSize="13sp"
+                        android:textStyle="bold"
+                        android:letterSpacing="0.03" />
+
+                    <ImageView
+                        android:id="@+id/imageSectionChevron"
+                        android:layout_width="20dp"
+                        android:layout_height="20dp"
+                        android:src="@drawable/ic_chevron_down"
+                        app:tint="@color/text_secondary" />
+                </LinearLayout>
+
+                <View
+                    android:layout_width="match_parent"
+                    android:layout_height="1dp"
+                    android:background="@color/border_dark" />
+
+                <LinearLayout
+                    android:id="@+id/imageSectionContent"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:padding="14dp">
+
+                    <!-- Brightness -->
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:gravity="center_vertical">
+
+                        <TextView
+                            android:layout_width="100dp"
+                            android:layout_height="wrap_content"
+                            android:text="@string/brightness"
+                            android:textColor="@color/text_secondary"
+                            android:textSize="12sp" />
+
+                        <SeekBar
+                            android:id="@+id/brightnessSeekBar"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:max="100"
+                            android:progress="50"
+                            android:progressTint="@color/hawkeye_primary"
+                            android:thumbTint="@color/hawkeye_primary" />
+
+                        <TextView
+                            android:id="@+id/brightnessValue"
+                            android:layout_width="40dp"
+                            android:layout_height="wrap_content"
+                            android:text="50"
+                            android:textColor="@color/text_value"
+                            android:textSize="12sp"
+                            android:gravity="end" />
+                    </LinearLayout>
+
+                    <!-- Contrast -->
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:gravity="center_vertical"
+                        android:layout_marginTop="10dp">
+
+                        <TextView
+                            android:layout_width="100dp"
+                            android:layout_height="wrap_content"
+                            android:text="@string/contrast"
+                            android:textColor="@color/text_secondary"
+                            android:textSize="12sp" />
+
+                        <SeekBar
+                            android:id="@+id/contrastSeekBar"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:max="100"
+                            android:progress="50"
+                            android:progressTint="@color/hawkeye_primary"
+                            android:thumbTint="@color/hawkeye_primary" />
+
+                        <TextView
+                            android:id="@+id/contrastValue"
+                            android:layout_width="40dp"
+                            android:layout_height="wrap_content"
+                            android:text="50"
+                            android:textColor="@color/text_value"
+                            android:textSize="12sp"
+                            android:gravity="end" />
+                    </LinearLayout>
+
+                    <!-- Saturation -->
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:gravity="center_vertical"
+                        android:layout_marginTop="10dp">
+
+                        <TextView
+                            android:layout_width="100dp"
+                            android:layout_height="wrap_content"
+                            android:text="@string/saturation"
+                            android:textColor="@color/text_secondary"
+                            android:textSize="12sp" />
+
+                        <SeekBar
+                            android:id="@+id/saturationSeekBar"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:max="100"
+                            android:progress="50"
+                            android:progressTint="@color/hawkeye_primary"
+                            android:thumbTint="@color/hawkeye_primary" />
+
+                        <TextView
+                            android:id="@+id/saturationValue"
+                            android:layout_width="40dp"
+                            android:layout_height="wrap_content"
+                            android:text="50"
+                            android:textColor="@color/text_value"
+                            android:textSize="12sp"
+                            android:gravity="end" />
+                    </LinearLayout>
+
+                    <!-- Hue -->
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:gravity="center_vertical"
+                        android:layout_marginTop="10dp">
+
+                        <TextView
+                            android:layout_width="100dp"
+                            android:layout_height="wrap_content"
+                            android:text="@string/hue"
+                            android:textColor="@color/text_secondary"
+                            android:textSize="12sp" />
+
+                        <SeekBar
+                            android:id="@+id/hueSeekBar"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:max="100"
+                            android:progress="50"
+                            android:progressTint="@color/hawkeye_primary"
+                            android:thumbTint="@color/hawkeye_primary" />
+
+                        <TextView
+                            android:id="@+id/hueValue"
+                            android:layout_width="40dp"
+                            android:layout_height="wrap_content"
+                            android:text="50"
+                            android:textColor="@color/text_value"
+                            android:textSize="12sp"
+                            android:gravity="end" />
+                    </LinearLayout>
+
+                    <!-- Gamma -->
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:gravity="center_vertical"
+                        android:layout_marginTop="10dp">
+
+                        <TextView
+                            android:layout_width="100dp"
+                            android:layout_height="wrap_content"
+                            android:text="@string/gamma"
+                            android:textColor="@color/text_secondary"
+                            android:textSize="12sp" />
+
+                        <SeekBar
+                            android:id="@+id/gammaSeekBar"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:max="100"
+                            android:progress="50"
+                            android:progressTint="@color/hawkeye_primary"
+                            android:thumbTint="@color/hawkeye_primary" />
+
+                        <TextView
+                            android:id="@+id/gammaValue"
+                            android:layout_width="40dp"
+                            android:layout_height="wrap_content"
+                            android:text="50"
+                            android:textColor="@color/text_value"
+                            android:textSize="12sp"
+                            android:gravity="end" />
+                    </LinearLayout>
+
+                    <!-- Sharpness -->
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:gravity="center_vertical"
+                        android:layout_marginTop="10dp">
+
+                        <TextView
+                            android:layout_width="100dp"
+                            android:layout_height="wrap_content"
+                            android:text="@string/sharpness"
+                            android:textColor="@color/text_secondary"
+                            android:textSize="12sp" />
+
+                        <SeekBar
+                            android:id="@+id/sharpnessSeekBar"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:max="100"
+                            android:progress="50"
+                            android:progressTint="@color/hawkeye_primary"
+                            android:thumbTint="@color/hawkeye_primary" />
+
+                        <TextView
+                            android:id="@+id/sharpnessValue"
+                            android:layout_width="40dp"
+                            android:layout_height="wrap_content"
+                            android:text="50"
+                            android:textColor="@color/text_value"
+                            android:textSize="12sp"
+                            android:gravity="end" />
+                    </LinearLayout>
+
+                    <!-- Defaults Button -->
+                    <Button
+                        android:id="@+id/defaultsButton"
+                        android:layout_width="match_parent"
+                        android:layout_height="44dp"
+                        android:text="@string/btn_defaults"
+                        android:textColor="@color/text_primary"
+                        android:background="@drawable/bg_control_button"
+                        android:layout_marginTop="14dp" />
+
+                </LinearLayout>
+
+                <!-- TRANSFORM Section -->
+                <LinearLayout
+                    android:id="@+id/transformSectionHeader"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:padding="14dp"
+                    android:background="@drawable/bg_section_header"
+                    android:clickable="true"
+                    android:focusable="true">
+
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="@string/section_transform"
+                        android:textColor="@color/text_secondary"
+                        android:textSize="13sp"
+                        android:textStyle="bold"
+                        android:letterSpacing="0.03" />
+
+                    <ImageView
+                        android:id="@+id/transformSectionChevron"
+                        android:layout_width="20dp"
+                        android:layout_height="20dp"
+                        android:src="@drawable/ic_chevron_down"
+                        app:tint="@color/text_secondary" />
+                </LinearLayout>
+
+                <View
+                    android:layout_width="match_parent"
+                    android:layout_height="1dp"
+                    android:background="@color/border_dark" />
+
+                <LinearLayout
+                    android:id="@+id/transformSectionContent"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:padding="14dp">
+
+                    <!-- Mirror and Flip -->
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:gravity="center_vertical">
+
+                        <CheckBox
+                            android:id="@+id/mirrorCheckBox"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="@string/label_mirror"
+                            android:textColor="@color/text_secondary"
+                            android:textSize="12sp"
+                            android:buttonTint="@color/hawkeye_primary" />
+
+                        <CheckBox
+                            android:id="@+id/flipCheckBox"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginStart="24dp"
+                            android:text="@string/label_flip"
+                            android:textColor="@color/text_secondary"
+                            android:textSize="12sp"
+                            android:buttonTint="@color/hawkeye_primary" />
+                    </LinearLayout>
+
+                </LinearLayout>
+
+            </LinearLayout>
+        </ScrollView>
     </LinearLayout>
 
     <!-- Status Message -->
@@ -210,8 +607,9 @@
         android:layout_height="wrap_content"
         android:padding="12dp"
         android:background="@color/surface_elevated"
-        android:textColor="@color/text_secondary"
+        android:textColor="@color/status_ok"
         android:textSize="14sp"
+        android:elevation="8dp"
         android:visibility="gone"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintStart_toStartOf="parent"

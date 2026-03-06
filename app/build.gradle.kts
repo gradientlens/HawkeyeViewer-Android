@@ -60,12 +60,6 @@ android {
     }
 }
 
-repositories {
-    flatDir {
-        dirs("libs")
-    }
-}
-
 dependencies {
     // AndroidX Core
     implementation("androidx.core:core-ktx:1.12.0")
@@ -86,9 +80,8 @@ dependencies {
     implementation("androidx.camera:camera-lifecycle:1.3.1")
     implementation("androidx.camera:camera-view:1.3.1")
 
-    // USB UVC Camera support - using local libusbcamera module
-    implementation(project(":libusbcamera"))
-    implementation(files("libs/libusbcommon_v4.1.1.aar"))
+    // USB UVC Camera support - using AndroidUSBCamera 3.3.3 (local libausbc module)
+    implementation(project(":libausbc"))
 
     // Leanback for Android TV
     "tvImplementation"("androidx.leanback:leanback:1.0.0")

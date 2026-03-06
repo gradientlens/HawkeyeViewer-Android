@@ -1,32 +1,45 @@
 package com.hawkeyeborescopes.viewer
 
 import android.Manifest
+import android.content.ContentValues
 import android.content.pm.PackageManager
-import android.hardware.usb.UsbDevice
 import android.os.Bundle
 import android.os.Environment
+import android.provider.MediaStore
 import android.util.Log
-import android.view.Surface
+import android.view.LayoutInflater
 import android.view.View
+import android.view.ViewGroup
+import android.widget.ImageView
+import android.widget.SeekBar
 import android.widget.Toast
-import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import com.hawkeyeborescopes.viewer.databinding.ActivityMainBinding
-import com.jiangdg.usbcamera.UVCCameraHelper
-import com.serenegiant.usb.widget.CameraViewInterface
+import com.jiangdg.ausbc.MultiCameraClient
+import com.jiangdg.ausbc.base.CameraActivity
+import com.jiangdg.ausbc.callback.ICameraStateCallBack
+import com.jiangdg.ausbc.callback.ICaptureCallBack
+import com.jiangdg.ausbc.camera.CameraUVC
+import com.jiangdg.ausbc.camera.bean.CameraRequest
+import com.jiangdg.ausbc.render.env.RotateType
+import com.jiangdg.ausbc.widget.AspectRatioTextureView
+import com.jiangdg.ausbc.widget.IAspectRatio
 import java.io.File
 import java.io.FileWriter
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-class MainActivity : AppCompatActivity(), CameraViewInterface.Callback {
+class MainActivity : CameraActivity() {
 
     private lateinit var binding: ActivityMainBinding
-    private var cameraHelper: UVCCameraHelper? = null
-    private var isRequest = false
-    private var isPreview = false
+    private var isRecording = false
+    private var currentRecordingPath: String? = null
+    private var isSettingsPanelOpen = false
+    private var buttonHelper: UsbButtonHelper? = null
+    private var mTextureView: AspectRatioTextureView? = null
+    private var wasCameraOpen = false
 
     companion object {
         private const val TAG = "HawkeyeCamera"
@@ -46,230 +59,400 @@ class MainActivity : AppCompatActivity(), CameraViewInterface.Callback {
         }
     }
 
-    private val deviceConnectListener = object : UVCCameraHelper.OnMyDevConnectListener {
-        override fun onAttachDev(device: UsbDevice?) {
-            Log.d(TAG, "USB device attached: ${device?.deviceName}")
-            showStatus("USB device attached: ${device?.deviceName}")
-            if (!isRequest) {
-                isRequest = true
-                Log.d(TAG, "Requesting USB permission")
-                cameraHelper?.requestPermission(0)
-            }
-        }
+    // ========================
+    // CameraActivity overrides
+    // ========================
 
-        override fun onDettachDev(device: UsbDevice?) {
-            Log.d(TAG, "USB device detached")
-            showStatus("USB device detached")
-            if (isRequest) {
-                isRequest = false
-                cameraHelper?.closeCamera()
-            }
-        }
+    override fun getRootView(layoutInflater: LayoutInflater): View? {
+        binding = ActivityMainBinding.inflate(layoutInflater)
+        return binding.root
+    }
 
-        override fun onConnectDev(device: UsbDevice?, isConnected: Boolean) {
-            if (!isConnected) {
-                Log.e(TAG, "Failed to connect camera")
-                showStatus("Failed to connect. Check resolution params")
-                Toast.makeText(this@MainActivity, "Camera connection failed", Toast.LENGTH_LONG).show()
-                isPreview = false
-            } else {
-                Log.d(TAG, "Camera connected successfully")
-                isPreview = true
-                showStatus("Camera connected successfully")
-            }
-        }
-
-        override fun onDisConnectDev(device: UsbDevice?) {
-            Log.d(TAG, "Camera disconnected")
-            showStatus("Camera disconnected")
-            isPreview = false
+    override fun getCameraView(): IAspectRatio {
+        return AspectRatioTextureView(this).also {
+            mTextureView = it
         }
     }
 
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
-        writeLog("=== APP STARTING ===")
-        writeLog("onCreate called")
+    override fun getCameraViewContainer(): ViewGroup {
+        return binding.cameraContainer
+    }
+
+    override fun getCameraRequest(): CameraRequest {
+        return CameraRequest.Builder()
+            .setPreviewWidth(720)
+            .setPreviewHeight(720)
+            .setRenderMode(CameraRequest.RenderMode.OPENGL)
+            .setDefaultRotateType(RotateType.ANGLE_0)
+            .setAudioSource(CameraRequest.AudioSource.SOURCE_AUTO)
+            .setAspectRatioShow(false)
+            .setCaptureRawImage(false)
+            .setRawPreviewData(false)
+            .create()
+    }
+
+    override fun onCameraState(
+        self: MultiCameraClient.ICamera,
+        code: ICameraStateCallBack.State,
+        msg: String?
+    ) {
+        when (code) {
+            ICameraStateCallBack.State.OPENED -> {
+                writeLog("Camera OPENED")
+                wasCameraOpen = true
+                showStatus("Camera ready")
+
+                // Re-apply mirror/flip transform (needed after resume)
+                updateTransform()
+
+                // Start button listener for physical borescope buttons
+                self.device.let { dev ->
+                    buttonHelper = UsbButtonHelper(
+                        context = this@MainActivity,
+                        onCapturePressed = { runOnUiThread { doCapture() } },
+                        onRecordPressed = { runOnUiThread { toggleRecording() } },
+                        writeLog = { msg2 -> writeLog(msg2) }
+                    )
+                    buttonHelper?.start(dev)
+                }
+            }
+            ICameraStateCallBack.State.CLOSED -> {
+                writeLog("Camera CLOSED")
+                showStatus("Camera disconnected")
+                buttonHelper?.stop()
+                buttonHelper = null
+            }
+            ICameraStateCallBack.State.ERROR -> {
+                writeLog("Camera ERROR: $msg")
+                showStatus("Camera error: $msg")
+                buttonHelper?.stop()
+                buttonHelper = null
+            }
+        }
+    }
+
+    // =====================
+    // Lifecycle & UI setup
+    // =====================
+
+    override fun initView() {
+        super.initView()
+        writeLog("=== APP STARTING (libausbc 3.3.3) ===")
 
         try {
-            writeLog("Inflating layout...")
-            binding = ActivityMainBinding.inflate(layoutInflater)
-            writeLog("Layout inflated successfully")
-
-            writeLog("Setting content view...")
-            setContentView(binding.root)
-            writeLog("Content view set successfully")
-
-            writeLog("Setting up UI...")
-            setupUI()
-            writeLog("UI setup complete")
-
-            writeLog("Checking permissions...")
             checkPermissions()
-            writeLog("Permission check complete")
-
-            writeLog("Initializing camera...")
-            initializeCamera()
-            writeLog("Camera initialization complete")
-
-            // Handle USB device attached intent
-            if (intent?.action == android.hardware.usb.UsbManager.ACTION_USB_DEVICE_ATTACHED) {
-                writeLog("USB device attached intent detected")
-                showStatus("USB device detected - Initializing...")
-            }
-
-            writeLog("onCreate completed successfully")
-            Toast.makeText(this, "App started. Log file: ${getExternalFilesDir(null)}/hawkeye_debug.log", Toast.LENGTH_LONG).show()
-        } catch (e: Exception) {
-            writeLog("FATAL ERROR in onCreate: ${e.message}")
-            writeLog("Stack trace: ${e.stackTraceToString()}")
-            Toast.makeText(this, "Error: ${e.message}. Check log at ${getExternalFilesDir(null)}/hawkeye_debug.log", Toast.LENGTH_LONG).show()
-            e.printStackTrace()
-
-            // Don't crash - show error screen
-            try {
-                setContentView(android.R.layout.simple_list_item_1)
-            } catch (ignore: Exception) {}
-        }
-    }
-
-    private fun initializeCamera() {
-        try {
-            writeLog("Getting camera view...")
-            val cameraView = binding.cameraView as? CameraViewInterface
-            if (cameraView == null) {
-                writeLog("ERROR: Camera view is null!")
-                throw Exception("Camera view cast failed")
-            }
-            writeLog("Camera view obtained successfully")
-
-            writeLog("Setting camera callback...")
-            cameraView.setCallback(this)
-            writeLog("Camera callback set")
-
-            writeLog("Getting UVCCameraHelper instance...")
-            cameraHelper = UVCCameraHelper.getInstance()
-            if (cameraHelper == null) {
-                writeLog("ERROR: UVCCameraHelper.getInstance() returned null!")
-                throw Exception("UVCCameraHelper is null")
-            }
-            writeLog("UVCCameraHelper instance obtained")
-
-            writeLog("Setting frame format to MJPEG...")
-            cameraHelper?.setDefaultFrameFormat(UVCCameraHelper.FRAME_FORMAT_MJPEG)
-            writeLog("Frame format set")
-
-            writeLog("Initializing USB monitor...")
-            cameraHelper?.initUSBMonitor(this, cameraView, deviceConnectListener)
-            writeLog("USB monitor initialized")
-
-            writeLog("Camera initialized successfully!")
+            setupUI()
+            writeLog("UI setup complete, waiting for camera...")
             showStatus("Ready - Connect USB camera")
         } catch (e: Exception) {
-            writeLog("ERROR in initializeCamera: ${e.message}")
+            writeLog("FATAL ERROR in initView: ${e.message}")
             writeLog("Stack trace: ${e.stackTraceToString()}")
-            showStatus("Camera init failed: ${e.message}")
-            Toast.makeText(this, "Camera failed: ${e.message}", Toast.LENGTH_LONG).show()
+            Toast.makeText(this, "Error: ${e.message}", Toast.LENGTH_LONG).show()
         }
+    }
+
+    override fun onStop() {
+        writeLog("onStop: cleaning up camera client")
+        // Explicitly tear down the camera client BEFORE the surface listener
+        // fires onSurfaceTextureDestroyed. This ensures clean state for resume.
+        // Double-call from onSurfaceTextureDestroyed is safe (no-op when client is null).
+        unRegisterMultiCamera()
+        super.onStop()
+    }
+
+    override fun onStart() {
+        super.onStart()
+        // On resume (not first launch), re-register the camera client.
+        // On first launch, mTextureView isn't available yet — initData()'s
+        // surface listener handles that case via onSurfaceTextureAvailable.
+        if (wasCameraOpen && mTextureView?.isAvailable == true) {
+            writeLog("onStart: resuming — re-registering camera")
+            registerMultiCamera()
+        }
+    }
+
+    override fun clear() {
+        try {
+            // Stop button listener
+            buttonHelper?.stop()
+            buttonHelper = null
+
+            // Stop recording if active
+            if (isRecording) {
+                captureVideoStop()
+                isRecording = false
+            }
+        } catch (e: Exception) {
+            writeLog("Error in clear: ${e.message}")
+        }
+        super.clear()
     }
 
     private fun setupUI() {
         // Controls panel initially hidden
         binding.controlsPanel.visibility = View.GONE
 
-        // Settings button toggles control panel
-        binding.settingsButton.setOnClickListener {
-            val newVisibility = if (binding.controlsPanel.visibility == View.VISIBLE) {
-                View.GONE
-            } else {
-                View.VISIBLE
-            }
-            binding.controlsPanel.visibility = newVisibility
-            writeLog("Settings panel visibility changed to: $newVisibility")
+        // Header button click listeners
+        setupHeaderButtons()
+
+        // Settings panel controls
+        setupCameraControls()
+        setupImageControls()
+        setupTransformControls()
+        setupCollapsibleSections()
+    }
+
+    private fun setupHeaderButtons() {
+        // Capture/Still button
+        binding.captureButton.setOnClickListener {
+            writeLog("Capture button pressed")
+            doCapture()
         }
 
-        // Start camera button
+        // Record/Video button
+        binding.recordButton.setOnClickListener {
+            writeLog("Record button pressed")
+            toggleRecording()
+        }
+
+        // Settings/Adjust button - toggles panel
+        binding.settingsButton.setOnClickListener {
+            isSettingsPanelOpen = !isSettingsPanelOpen
+            binding.controlsPanel.visibility = if (isSettingsPanelOpen) View.VISIBLE else View.GONE
+
+            // Update icon color to show active state
+            val color = if (isSettingsPanelOpen) {
+                ContextCompat.getColor(this, R.color.hawkeye_primary)
+            } else {
+                ContextCompat.getColor(this, R.color.text_secondary)
+            }
+            binding.settingsIcon.setColorFilter(color)
+
+            writeLog("Settings panel visibility changed to: $isSettingsPanelOpen")
+        }
+    }
+
+    private fun setupCameraControls() {
+        // Start camera button - request permission to trigger camera open
         binding.startButton.setOnClickListener {
-            if (cameraHelper != null) {
-                cameraHelper?.requestPermission(0)
+            writeLog("Start button pressed, requesting device list...")
+            val devices = getDeviceList()
+            if (devices.isNullOrEmpty()) {
+                showStatus("No USB camera found")
+                writeLog("No USB devices found")
+            } else {
+                writeLog("Found ${devices.size} USB devices, requesting permission for first...")
+                requestPermission(devices[0])
                 showStatus("Starting camera...")
             }
         }
 
         // Stop camera button
         binding.stopButton.setOnClickListener {
-            cameraHelper?.closeCamera()
-            isPreview = false
-            showStatus("Camera stopped")
-        }
-
-        // Capture button
-        binding.captureButton.setOnClickListener {
-            if (isPreview) {
-                captureImage()
-            } else {
-                showStatus("Start camera first")
+            try {
+                // Stop recording first if active
+                if (isRecording) {
+                    captureVideoStop()
+                    isRecording = false
+                    updateRecordingUI(false)
+                }
+                closeCamera()
+                wasCameraOpen = false
+                showStatus("Camera stopped")
+            } catch (e: Exception) {
+                writeLog("Error stopping camera: ${e.message}")
             }
         }
+    }
 
-        // Record button
-        binding.recordButton.setOnClickListener {
-            if (isPreview) {
-                toggleRecording()
-            } else {
-                showStatus("Start camera first")
-            }
-        }
-
+    private fun setupImageControls() {
         // Brightness control
-        binding.brightnessSeekBar.max = 100
-        binding.brightnessSeekBar.progress = 50
-        binding.brightnessSeekBar.setOnSeekBarChangeListener(object : android.widget.SeekBar.OnSeekBarChangeListener {
-            override fun onProgressChanged(seekBar: android.widget.SeekBar?, progress: Int, fromUser: Boolean) {
-                if (fromUser && cameraHelper != null && cameraHelper!!.isCameraOpened) {
-                    writeLog("Setting brightness to: $progress")
-                    try {
-                        cameraHelper?.setModelValue(UVCCameraHelper.MODE_BRIGHTNESS, progress)
-                        writeLog("Brightness set successfully")
-                    } catch (e: Exception) {
-                        writeLog("Failed to set brightness: ${e.message}")
-                    }
+        setupSeekBar(binding.brightnessSeekBar, binding.brightnessValue) { progress ->
+            if (isCameraOpened()) {
+                try { setBrightness(progress) } catch (e: Exception) {
+                    writeLog("Failed to set brightness: ${e.message}")
                 }
             }
-            override fun onStartTrackingTouch(seekBar: android.widget.SeekBar?) {}
-            override fun onStopTrackingTouch(seekBar: android.widget.SeekBar?) {}
-        })
+        }
 
         // Contrast control
-        binding.contrastSeekBar.max = 100
-        binding.contrastSeekBar.progress = 50
-        binding.contrastSeekBar.setOnSeekBarChangeListener(object : android.widget.SeekBar.OnSeekBarChangeListener {
-            override fun onProgressChanged(seekBar: android.widget.SeekBar?, progress: Int, fromUser: Boolean) {
-                if (fromUser && cameraHelper != null && cameraHelper!!.isCameraOpened) {
-                    writeLog("Setting contrast to: $progress")
-                    try {
-                        cameraHelper?.setModelValue(UVCCameraHelper.MODE_CONTRAST, progress)
-                        writeLog("Contrast set successfully")
-                    } catch (e: Exception) {
-                        writeLog("Failed to set contrast: ${e.message}")
-                    }
+        setupSeekBar(binding.contrastSeekBar, binding.contrastValue) { progress ->
+            if (isCameraOpened()) {
+                try { setContrast(progress) } catch (e: Exception) {
+                    writeLog("Failed to set contrast: ${e.message}")
                 }
             }
-            override fun onStartTrackingTouch(seekBar: android.widget.SeekBar?) {}
-            override fun onStopTrackingTouch(seekBar: android.widget.SeekBar?) {}
-        })
+        }
 
         // Saturation control
-        binding.saturationSeekBar.max = 100
-        binding.saturationSeekBar.setOnSeekBarChangeListener(object : android.widget.SeekBar.OnSeekBarChangeListener {
-            override fun onProgressChanged(seekBar: android.widget.SeekBar?, progress: Int, fromUser: Boolean) {
-                // Saturation control not available in this library version
-                // Could be added later with UVCCamera.PU_SATURATION if supported by camera
+        setupSeekBar(binding.saturationSeekBar, binding.saturationValue) { progress ->
+            if (isCameraOpened()) {
+                try { setSaturation(progress) } catch (e: Exception) {
+                    writeLog("Failed to set saturation: ${e.message}")
+                }
             }
-            override fun onStartTrackingTouch(seekBar: android.widget.SeekBar?) {}
-            override fun onStopTrackingTouch(seekBar: android.widget.SeekBar?) {}
+        }
+
+        // Hue control
+        setupSeekBar(binding.hueSeekBar, binding.hueValue) { progress ->
+            if (isCameraOpened()) {
+                try { setHue(progress) } catch (e: Exception) {
+                    writeLog("Failed to set hue: ${e.message}")
+                }
+            }
+        }
+
+        // Gamma control
+        setupSeekBar(binding.gammaSeekBar, binding.gammaValue) { progress ->
+            if (isCameraOpened()) {
+                try { setGamma(progress) } catch (e: Exception) {
+                    writeLog("Failed to set gamma: ${e.message}")
+                }
+            }
+        }
+
+        // Sharpness control
+        setupSeekBar(binding.sharpnessSeekBar, binding.sharpnessValue) { progress ->
+            if (isCameraOpened()) {
+                try { setSharpness(progress) } catch (e: Exception) {
+                    writeLog("Failed to set sharpness: ${e.message}")
+                }
+            }
+        }
+
+        // Defaults button
+        binding.defaultsButton.setOnClickListener {
+            resetImageControlsToDefaults()
+        }
+    }
+
+    private fun setupSeekBar(seekBar: SeekBar, valueText: android.widget.TextView, onProgress: (Int) -> Unit) {
+        seekBar.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
+                valueText.text = progress.toString()
+            }
+            override fun onStartTrackingTouch(seekBar: SeekBar?) {}
+            override fun onStopTrackingTouch(seekBar: SeekBar?) {
+                seekBar?.let { onProgress(it.progress) }
+            }
         })
     }
+
+    private fun resetImageControlsToDefaults() {
+        // Reset UI sliders to midpoint
+        binding.brightnessSeekBar.progress = 50
+        binding.contrastSeekBar.progress = 50
+        binding.saturationSeekBar.progress = 50
+        binding.hueSeekBar.progress = 50
+        binding.gammaSeekBar.progress = 50
+        binding.sharpnessSeekBar.progress = 50
+
+        // Apply camera-native defaults if camera is open
+        if (isCameraOpened()) {
+            try {
+                resetBrightness()
+                resetContrast()
+                resetSaturation()
+                resetHue()
+                resetGamma()
+                resetSharpness()
+
+                // Read back actual values and update sliders
+                updateSliderFromCamera(binding.brightnessSeekBar, binding.brightnessValue) { getBrightness() }
+                updateSliderFromCamera(binding.contrastSeekBar, binding.contrastValue) { getContrast() }
+                updateSliderFromCamera(binding.saturationSeekBar, binding.saturationValue) { getSaturation() }
+                updateSliderFromCamera(binding.hueSeekBar, binding.hueValue) { getHue() }
+                updateSliderFromCamera(binding.gammaSeekBar, binding.gammaValue) { getGamma() }
+                updateSliderFromCamera(binding.sharpnessSeekBar, binding.sharpnessValue) { getSharpness() }
+            } catch (e: Exception) {
+                writeLog("Error resetting image controls: ${e.message}")
+            }
+        }
+
+        showStatus("Reset to defaults")
+    }
+
+    private fun updateSliderFromCamera(seekBar: SeekBar, valueText: android.widget.TextView, getter: () -> Int?) {
+        try {
+            val value = getter() ?: return
+            seekBar.progress = value.coerceIn(0, 100)
+            valueText.text = seekBar.progress.toString()
+        } catch (e: Exception) {
+            writeLog("Failed to read camera value: ${e.message}")
+        }
+    }
+
+    private fun setupTransformControls() {
+        // Mirror checkbox (horizontal flip)
+        binding.mirrorCheckBox.setOnCheckedChangeListener { _, isChecked ->
+            writeLog("Mirror: $isChecked")
+            updateTransform()
+        }
+
+        // Flip checkbox (vertical flip)
+        binding.flipCheckBox.setOnCheckedChangeListener { _, isChecked ->
+            writeLog("Flip: $isChecked")
+            updateTransform()
+        }
+    }
+
+    private fun updateTransform() {
+        if (!isCameraOpened()) return
+        val mirror = binding.mirrorCheckBox.isChecked
+        val flip = binding.flipCheckBox.isChecked
+        val rotateType = when {
+            mirror && flip -> RotateType.ANGLE_180      // both = 180° rotation
+            mirror -> RotateType.FLIP_LEFT_RIGHT         // horizontal mirror
+            flip -> RotateType.FLIP_UP_DOWN              // vertical flip
+            else -> RotateType.ANGLE_0                   // no transform
+        }
+        writeLog("Setting transform: $rotateType (mirror=$mirror, flip=$flip)")
+        setRotateType(rotateType)
+    }
+
+    private fun setupCollapsibleSections() {
+        // Camera section
+        binding.cameraSectionHeader.setOnClickListener {
+            toggleSection(binding.cameraSectionContent, binding.cameraSectionChevron)
+        }
+
+        // Image section
+        binding.imageSectionHeader.setOnClickListener {
+            toggleSection(binding.imageSectionContent, binding.imageSectionChevron)
+        }
+
+        // Transform section
+        binding.transformSectionHeader.setOnClickListener {
+            toggleSection(binding.transformSectionContent, binding.transformSectionChevron)
+        }
+    }
+
+    private fun toggleSection(content: View, chevron: ImageView) {
+        if (content.visibility == View.VISIBLE) {
+            content.visibility = View.GONE
+            chevron.rotation = -90f
+        } else {
+            content.visibility = View.VISIBLE
+            chevron.rotation = 0f
+        }
+    }
+
+    private fun updateRecordingUI(recording: Boolean) {
+        runOnUiThread {
+            val color = if (recording) {
+                ContextCompat.getColor(this, R.color.hawkeye_primary)
+            } else {
+                ContextCompat.getColor(this, R.color.text_secondary)
+            }
+            binding.recordIcon.setColorFilter(color)
+            binding.recordLabel.text = if (recording) "STOP" else getString(R.string.btn_video)
+            binding.recordLabel.setTextColor(color)
+        }
+    }
+
+    // =====================
+    // Permissions
+    // =====================
 
     private fun checkPermissions() {
         val permissions = mutableListOf<String>()
@@ -300,54 +483,6 @@ class MainActivity : AppCompatActivity(), CameraViewInterface.Callback {
         }
     }
 
-    private fun captureImage() {
-        // TODO: Implement image capture using UVCCameraHelper
-        showStatus("Image capture - Coming soon")
-    }
-
-    private fun toggleRecording() {
-        // TODO: Implement video recording using UVCCameraHelper
-        showStatus("Video recording - Coming soon")
-    }
-
-    private fun showStatus(message: String) {
-        runOnUiThread {
-            binding.statusText.text = message
-            binding.statusText.visibility = View.VISIBLE
-            binding.statusText.postDelayed({
-                binding.statusText.visibility = View.GONE
-            }, 3000)
-        }
-    }
-
-    override fun onStart() {
-        super.onStart()
-        cameraHelper?.registerUSB()
-    }
-
-    override fun onStop() {
-        super.onStop()
-        cameraHelper?.unregisterUSB()
-    }
-
-    override fun onDestroy() {
-        super.onDestroy()
-        cameraHelper?.release()
-    }
-
-    // CameraViewInterface.Callback implementations
-    override fun onSurfaceCreated(view: CameraViewInterface?, surface: Surface?) {
-        // Surface is ready
-    }
-
-    override fun onSurfaceChanged(view: CameraViewInterface?, surface: Surface?, width: Int, height: Int) {
-        // Surface size changed
-    }
-
-    override fun onSurfaceDestroy(view: CameraViewInterface?, surface: Surface?) {
-        // Surface being destroyed
-    }
-
     override fun onRequestPermissionsResult(
         requestCode: Int,
         permissions: Array<out String>,
@@ -358,20 +493,208 @@ class MainActivity : AppCompatActivity(), CameraViewInterface.Callback {
             REQUEST_PERMISSION -> {
                 val granted = grantResults.isNotEmpty() && grantResults.all { it == PackageManager.PERMISSION_GRANTED }
                 if (granted) {
-                    Log.d(TAG, "All permissions granted")
+                    writeLog("All permissions granted")
                     showStatus("Permissions granted")
                 } else {
-                    Log.w(TAG, "Some permissions denied")
+                    writeLog("Some permissions denied")
                     showStatus("Some permissions denied - app may not work correctly")
                     Toast.makeText(this, "Please grant all permissions for full functionality", Toast.LENGTH_LONG).show()
                 }
-
-                // Log individual permission results
-                permissions.forEachIndexed { index, permission ->
-                    val result = if (grantResults[index] == PackageManager.PERMISSION_GRANTED) "granted" else "denied"
-                    Log.d(TAG, "Permission $permission: $result")
-                }
             }
         }
+    }
+
+    // =====================
+    // Capture & Recording
+    // =====================
+
+    private fun getAppPicturesDir(): File {
+        val dir = File(getExternalFilesDir(null), "Pictures")
+        if (!dir.exists()) dir.mkdirs()
+        return dir
+    }
+
+    private fun getAppMoviesDir(): File {
+        val dir = File(getExternalFilesDir(null), "Movies")
+        if (!dir.exists()) dir.mkdirs()
+        return dir
+    }
+
+    /**
+     * Capture a still image. Named doCapture() to avoid shadowing
+     * the parent CameraActivity.captureImage(callback, path) method.
+     */
+    private fun doCapture() {
+        if (!isCameraOpened()) {
+            writeLog("doCapture: camera not open")
+            showStatus("Camera not ready")
+            return
+        }
+
+        try {
+            val captureDir = getAppPicturesDir()
+            val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
+            val imagePath = File(captureDir, "IMG_$timestamp.jpg").absolutePath
+
+            writeLog("doCapture: saving to $imagePath")
+            showStatus("Capturing...")
+
+            // Flash effect on capture icon
+            binding.captureIcon.setColorFilter(ContextCompat.getColor(this, R.color.hawkeye_primary))
+            binding.captureIcon.postDelayed({
+                binding.captureIcon.setColorFilter(ContextCompat.getColor(this, R.color.text_secondary))
+            }, 150)
+
+            captureImage(object : ICaptureCallBack {
+                override fun onBegin() {
+                    writeLog("doCapture: onBegin")
+                }
+
+                override fun onError(error: String?) {
+                    runOnUiThread {
+                        writeLog("doCapture: onError - $error")
+                        showStatus("Capture failed: $error")
+                    }
+                }
+
+                override fun onComplete(path: String?) {
+                    runOnUiThread {
+                        writeLog("doCapture: onComplete - path=$path")
+                        if (path != null) {
+                            showStatus("Image saved")
+                            notifyMediaScanner(path)
+                        } else {
+                            showStatus("Capture failed - null path")
+                        }
+                    }
+                }
+            }, imagePath)
+
+            writeLog("doCapture: captureImage() called successfully")
+        } catch (e: Exception) {
+            writeLog("doCapture: EXCEPTION - ${e.message}")
+            writeLog("doCapture: stack - ${e.stackTraceToString()}")
+            showStatus("Capture error: ${e.message}")
+        }
+    }
+
+    private fun notifyMediaScanner(path: String) {
+        try {
+            val file = File(path)
+            if (!file.exists() || file.length() == 0L) {
+                writeLog("Media scanner skipped - file missing or empty: $path")
+                return
+            }
+            val isVideo = path.endsWith(".mp4")
+            val mimeType = if (isVideo) "video/mp4" else "image/jpeg"
+            val collection = if (isVideo) {
+                MediaStore.Video.Media.EXTERNAL_CONTENT_URI
+            } else {
+                MediaStore.Images.Media.EXTERNAL_CONTENT_URI
+            }
+            val values = ContentValues().apply {
+                put(MediaStore.MediaColumns.DISPLAY_NAME, file.name)
+                put(MediaStore.MediaColumns.MIME_TYPE, mimeType)
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+                    put(MediaStore.MediaColumns.RELATIVE_PATH,
+                        if (isVideo) Environment.DIRECTORY_MOVIES else Environment.DIRECTORY_PICTURES)
+                    put(MediaStore.MediaColumns.IS_PENDING, 1)
+                }
+            }
+            val uri = contentResolver.insert(collection, values)
+            if (uri != null) {
+                contentResolver.openOutputStream(uri)?.use { outputStream ->
+                    file.inputStream().use { inputStream ->
+                        inputStream.copyTo(outputStream)
+                    }
+                }
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+                    values.clear()
+                    values.put(MediaStore.MediaColumns.IS_PENDING, 0)
+                    contentResolver.update(uri, values, null, null)
+                }
+                writeLog("Saved to gallery: ${file.name}")
+            }
+        } catch (e: Exception) {
+            writeLog("Media scanner error: ${e.message}")
+        }
+    }
+
+    private fun toggleRecording() {
+        if (!isCameraOpened()) {
+            showStatus("Camera not ready")
+            return
+        }
+
+        try {
+            if (isRecording) {
+                // Stop recording
+                writeLog("Stopping recording...")
+                captureVideoStop()
+                isRecording = false
+                updateRecordingUI(false)
+                showStatus("Saving video...")
+            } else {
+                // Start recording
+                // NOTE: Library appends .mp4 to the path, so do NOT include .mp4 extension
+                val recordDir = getAppMoviesDir()
+                val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
+                currentRecordingPath = File(recordDir, "VID_$timestamp").absolutePath
+
+                writeLog("Starting recording to: $currentRecordingPath")
+
+                captureVideoStart(object : ICaptureCallBack {
+                    override fun onBegin() {
+                        runOnUiThread {
+                            writeLog("Recording started")
+                            isRecording = true
+                            updateRecordingUI(true)
+                            showStatus("Recording...")
+                        }
+                    }
+
+                    override fun onError(error: String?) {
+                        runOnUiThread {
+                            writeLog("Recording error: $error")
+                            showStatus("Recording error: $error")
+                            isRecording = false
+                            updateRecordingUI(false)
+                        }
+                    }
+
+                    override fun onComplete(path: String?) {
+                        runOnUiThread {
+                            writeLog("Recording saved: $path")
+                            if (path != null) {
+                                showStatus("Video saved")
+                                notifyMediaScanner(path)
+                            }
+                        }
+                    }
+                }, currentRecordingPath)
+            }
+        } catch (e: Exception) {
+            writeLog("Recording error: ${e.message}")
+            showStatus("Recording error: ${e.message}")
+            isRecording = false
+            updateRecordingUI(false)
+        }
+    }
+
+    // =====================
+    // Status display
+    // =====================
+
+    private fun showStatus(message: String) {
+        runOnUiThread {
+            binding.statusText.text = message
+            binding.statusText.visibility = View.VISIBLE
+            binding.statusText.removeCallbacks(hideStatusRunnable)
+            binding.statusText.postDelayed(hideStatusRunnable, 3000)
+        }
+    }
+
+    private val hideStatusRunnable = Runnable {
+        binding.statusText.visibility = View.GONE
     }
 }

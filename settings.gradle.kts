@@ -12,9 +12,11 @@ dependencyResolutionManagement {
         google()
         mavenCentral()
         maven { url = uri("https://jitpack.io") }
+        flatDir { dirs("libausbc/libs") }
     }
 }
 
 rootProject.name = "Hawkeye Viewer"
 include(":app")
 include(":libusbcamera")
+include(":libausbc")

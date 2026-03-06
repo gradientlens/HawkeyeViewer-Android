@@ -593,7 +593,11 @@ public final class USBMonitor {
 				hasPermissionCounts = mHasPermissions.size();
 				mHasPermissions.clear();
 				for (final UsbDevice device: devices) {
-					hasPermission(device);
+					try {
+						hasPermission(device);
+					} catch (final Exception e) {
+						Log.w(TAG, "mDeviceCheckRunnable: error checking permission for " + device, e);
+					}
 				}
 				m = mHasPermissions.size();
 			}
@@ -729,13 +733,21 @@ public final class USBMonitor {
 		}
 		if (useNewAPI && BuildCheck.isAndroid5()) {
 			sb.append("#");
-			if (TextUtils.isEmpty(serial)) {
-				sb.append(device.getSerialNumber());	sb.append("#");	// API >= 21
-			}
-			sb.append(device.getManufacturerName());	sb.append("#");	// API >= 21
-			sb.append(device.getConfigurationCount());	sb.append("#");	// API >= 21
-			if (BuildCheck.isMarshmallow()) {
-				sb.append(device.getVersion());			sb.append("#");	// API >= 23
+			try {
+				if (TextUtils.isEmpty(serial)) {
+					sb.append(device.getSerialNumber());	sb.append("#");	// API >= 21
+				}
+				sb.append(device.getManufacturerName());	sb.append("#");	// API >= 21
+				sb.append(device.getConfigurationCount());	sb.append("#");	// API >= 21
+				if (BuildCheck.isMarshmallow()) {
+					sb.append(device.getVersion());			sb.append("#");	// API >= 23
+				}
+			} catch (final SecurityException e) {
+				// USB permission not yet granted — getSerialNumber() and
+				// getManufacturerName() require it on Android 10+.
+				// Fall back to the basic vendor/product key which is sufficient
+				// for the permission-request flow.
+				Log.w(TAG, "getDeviceKeyName: USB permission not yet granted, using basic device key");
 			}
 		}
 //		if (DEBUG) Log.v(TAG, "getDeviceKeyName:" + sb.toString());

@@ -306,49 +306,90 @@ public abstract class AbstractUVCCameraHandler extends Handler {
     }
 
     public int getValue(final int flag) {
-        checkReleased();
+        if (isReleased()) return 0;
         final CameraThread thread = mWeakThread.get();
         final UVCCamera camera = thread != null ? thread.mUVCCamera : null;
-        if (camera != null) {
+        if (camera == null) return 0;
+        try {
             if (flag == UVCCamera.PU_BRIGHTNESS) {
                 return camera.getBrightness();
             } else if (flag == UVCCamera.PU_CONTRAST) {
                 return camera.getContrast();
+            } else if (flag == UVCCamera.PU_SATURATION) {
+                return camera.getSaturation();
+            } else if (flag == UVCCamera.PU_HUE) {
+                return camera.getHue();
+            } else if (flag == UVCCamera.PU_GAMMA) {
+                return camera.getGamma();
+            } else if (flag == UVCCamera.PU_SHARPNESS) {
+                return camera.getSharpness();
             }
+        } catch (final Exception e) {
+            Log.w(TAG, "getValue failed for flag=" + flag + ": " + e.getMessage());
         }
-        throw new IllegalStateException();
+        return 0;
     }
 
     public int setValue(final int flag, final int value) {
-        checkReleased();
+        if (isReleased()) return 0;
         final CameraThread thread = mWeakThread.get();
         final UVCCamera camera = thread != null ? thread.mUVCCamera : null;
-        if (camera != null) {
+        if (camera == null) return 0;
+        try {
             if (flag == UVCCamera.PU_BRIGHTNESS) {
                 camera.setBrightness(value);
                 return camera.getBrightness();
             } else if (flag == UVCCamera.PU_CONTRAST) {
                 camera.setContrast(value);
                 return camera.getContrast();
+            } else if (flag == UVCCamera.PU_SATURATION) {
+                camera.setSaturation(value);
+                return camera.getSaturation();
+            } else if (flag == UVCCamera.PU_HUE) {
+                camera.setHue(value);
+                return camera.getHue();
+            } else if (flag == UVCCamera.PU_GAMMA) {
+                camera.setGamma(value);
+                return camera.getGamma();
+            } else if (flag == UVCCamera.PU_SHARPNESS) {
+                camera.setSharpness(value);
+                return camera.getSharpness();
             }
+        } catch (final Exception e) {
+            Log.w(TAG, "setValue failed for flag=" + flag + " value=" + value + ": " + e.getMessage());
         }
-        throw new IllegalStateException();
+        return 0;
     }
 
     public int resetValue(final int flag) {
-        checkReleased();
+        if (isReleased()) return 0;
         final CameraThread thread = mWeakThread.get();
         final UVCCamera camera = thread != null ? thread.mUVCCamera : null;
-        if (camera != null) {
+        if (camera == null) return 0;
+        try {
             if (flag == UVCCamera.PU_BRIGHTNESS) {
                 camera.resetBrightness();
                 return camera.getBrightness();
             } else if (flag == UVCCamera.PU_CONTRAST) {
                 camera.resetContrast();
                 return camera.getContrast();
+            } else if (flag == UVCCamera.PU_SATURATION) {
+                camera.resetSaturation();
+                return camera.getSaturation();
+            } else if (flag == UVCCamera.PU_HUE) {
+                camera.resetHue();
+                return camera.getHue();
+            } else if (flag == UVCCamera.PU_GAMMA) {
+                camera.resetGamma();
+                return camera.getGamma();
+            } else if (flag == UVCCamera.PU_SHARPNESS) {
+                camera.resetSharpness();
+                return camera.getSharpness();
             }
+        } catch (final Exception e) {
+            Log.w(TAG, "resetValue failed for flag=" + flag + ": " + e.getMessage());
         }
-        throw new IllegalStateException();
+        return 0;
     }
 
     @Override
@@ -404,6 +445,8 @@ public abstract class AbstractUVCCameraHandler extends Handler {
         private final Set<CameraCallback> mCallbacks = new CopyOnWriteArraySet<CameraCallback>();
         private int mWidth, mHeight, mPreviewMode;
         private float mBandwidthFactor;
+        private int mMinFps = 1;
+        private int mMaxFps = 31;
         private boolean mIsPreviewing;
         private boolean mIsRecording;
 
@@ -545,7 +588,7 @@ public abstract class AbstractUVCCameraHandler extends Handler {
             if (DEBUG) Log.v(TAG_THREAD, "handleStartPreview:");
             if ((mUVCCamera == null) || mIsPreviewing) return;
             try {
-                mUVCCamera.setPreviewSize(mWidth, mHeight, 1, 31, mPreviewMode, mBandwidthFactor);
+                mUVCCamera.setPreviewSize(mWidth, mHeight, mMinFps, mMaxFps, mPreviewMode, mBandwidthFactor);
                 // 获取USB Camera预览数据，使用NV21颜色会失真
                 // 无论使用YUV还是MPEG，setFrameCallback的设置效果一致
 //				mUVCCamera.setFrameCallback(mIFrameCallback, UVCCamera.PIXEL_FORMAT_NV21);
@@ -553,7 +596,7 @@ public abstract class AbstractUVCCameraHandler extends Handler {
             } catch (final IllegalArgumentException e) {
                 try {
                     // fallback to YUV mode
-                    mUVCCamera.setPreviewSize(mWidth, mHeight, 1, 31, UVCCamera.DEFAULT_PREVIEW_MODE, mBandwidthFactor);
+                    mUVCCamera.setPreviewSize(mWidth, mHeight, mMinFps, mMaxFps, UVCCamera.DEFAULT_PREVIEW_MODE, mBandwidthFactor);
                 } catch (final IllegalArgumentException e1) {
                     callOnError(e1);
                     return;

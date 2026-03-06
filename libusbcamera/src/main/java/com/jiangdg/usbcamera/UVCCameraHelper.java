@@ -41,7 +41,12 @@ public class UVCCameraHelper {
     public static final int FRAME_FORMAT_MJPEG = UVCCamera.FRAME_FORMAT_MJPEG;
     public static final int MODE_BRIGHTNESS = UVCCamera.PU_BRIGHTNESS;
     public static final int MODE_CONTRAST = UVCCamera.PU_CONTRAST;
+    public static final int MODE_HUE = UVCCamera.PU_HUE;
+    public static final int MODE_SATURATION = UVCCamera.PU_SATURATION;
+    public static final int MODE_SHARPNESS = UVCCamera.PU_SHARPNESS;
+    public static final int MODE_GAMMA = UVCCamera.PU_GAMMA;
     private int mFrameFormat = FRAME_FORMAT_MJPEG;
+    private float mBandwidthFactor = 1.0f;  // Default bandwidth factor
 
     private static UVCCameraHelper mCameraHelper;
     // USB Manager
@@ -154,9 +159,14 @@ public class UVCCameraHelper {
             mCameraHandler = null;
         }
         // initialize camera handler
+        // Use bandwidth factor > 1.0 to improve reliability through USB hubs/long cables
         mCamView.setAspectRatio(previewWidth / (float)previewHeight);
         mCameraHandler = UVCCameraHandler.createHandler(mActivity, mCamView, 2,
-                previewWidth, previewHeight, mFrameFormat);
+                previewWidth, previewHeight, mFrameFormat, mBandwidthFactor);
+    }
+
+    public void setBandwidthFactor(float factor) {
+        this.mBandwidthFactor = factor;
     }
 
     public void updateResolution(int width, int height) {
@@ -171,7 +181,7 @@ public class UVCCameraHelper {
         }
         mCamView.setAspectRatio(previewWidth / (float)previewHeight);
         mCameraHandler = UVCCameraHandler.createHandler(mActivity,mCamView, 2,
-                previewWidth, previewHeight, mFrameFormat);
+                previewWidth, previewHeight, mFrameFormat, mBandwidthFactor);
         openCamera(mCtrlBlock);
         new Thread(new Runnable() {
             @Override
