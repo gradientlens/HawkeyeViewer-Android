@@ -26,4 +26,7 @@
     <color name="grid_red">#ff3b3b</color>
     <color name="grid_white">#ffffff</color>
     <color name="grid_black">#000000</color>
+
+    <!-- Launcher Icon -->
+    <color name="icon_background">#FFFFFF</color>
 </resources>
