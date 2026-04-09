@@ -20,6 +20,7 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.SurfaceTexture
 import android.opengl.EGLContext
+import android.opengl.GLES20
 import android.os.*
 import android.provider.MediaStore
 import android.view.Surface
@@ -73,6 +74,11 @@ class RenderManager(
     private var mWidth: Int = 0
     private var mHeight: Int = 0
     private var mFBOBufferId: Int = 0
+    // Current adjustment values for software fallback on still captures
+    @Volatile private var mAdjBrightness: Float = 1.0f
+    @Volatile private var mAdjContrast: Float = 1.0f
+    @Volatile private var mAdjSaturation: Float = 1.0f
+    @Volatile private var mAdjGamma: Float = 1.0f
     private var mContext: Context = context
     private var mEffectList = arrayListOf<AbstractEffect>()
     private var mCacheEffectList = arrayListOf<AbstractEffect>()
@@ -199,6 +205,40 @@ class RenderManager(
                     Logger.i(TAG, "remove effect, name = ${it.javaClass.simpleName}, size = ${mEffectList.size}")
                 }
             }
+            MSG_GL_SET_ADJUSTMENTS -> {
+                @Suppress("UNCHECKED_CAST")
+                (msg.obj as? FloatArray)?.let { values ->
+                    if (values.size >= 6) {
+                        // Apply to screen (preview), capture (stills), and encode (video)
+                        mScreenRender?.brightness = values[0]
+                        mScreenRender?.contrast = values[1]
+                        mScreenRender?.saturation = values[2]
+                        mScreenRender?.hue = values[3]
+                        mScreenRender?.gamma = values[4]
+                        mScreenRender?.sharpness = values[5]
+
+                        mCaptureRender?.brightness = values[0]
+                        mCaptureRender?.contrast = values[1]
+                        mCaptureRender?.saturation = values[2]
+                        mCaptureRender?.hue = values[3]
+                        mCaptureRender?.gamma = values[4]
+                        mCaptureRender?.sharpness = values[5]
+
+                        mEncodeRender?.brightness = values[0]
+                        mEncodeRender?.contrast = values[1]
+                        mEncodeRender?.saturation = values[2]
+                        mEncodeRender?.hue = values[3]
+                        mEncodeRender?.gamma = values[4]
+                        mEncodeRender?.sharpness = values[5]
+
+                        // Store for software fallback on still captures
+                        mAdjBrightness = values[0]
+                        mAdjContrast = values[1]
+                        mAdjSaturation = values[2]
+                        mAdjGamma = values[4]
+                    }
+                }
+            }
             MSG_GL_RELEASE -> {
                 EventBus.with<Boolean>(BusKey.KEY_RENDER_READY).postMessage(false)
                 mEffectList.forEach { effect ->
@@ -215,7 +255,10 @@ class RenderManager(
         return true
     }
 
+    private var mLastInputTextureId: Int = -1
+
     private fun drawFrame2Capture(fboId: Int) {
+        mLastInputTextureId = fboId
         mCaptureRender?.drawFrame(fboId)?.let {
             mCaptureRender!!.getFrameBufferId()
         }?.also { id ->
@@ -339,6 +382,20 @@ class RenderManager(
     }
 
     /**
+     * Set image adjustment parameters (applied via GPU shader)
+     *
+     * @param brightness 0.0-2.0, default 1.0 (normal)
+     * @param contrast 0.0-2.0, default 1.0 (normal)
+     * @param saturation 0.0-3.0, default 1.0 (normal)
+     * @param hue rotation in radians, default 0.0
+     * @param gamma 0.2-3.0, default 1.0 (normal)
+     */
+    fun setImageAdjustments(brightness: Float, contrast: Float, saturation: Float, hue: Float, gamma: Float, sharpness: Float = 0.0f) {
+        val values = floatArrayOf(brightness, contrast, saturation, hue, gamma, sharpness)
+        mRenderHandler?.obtainMessage(MSG_GL_SET_ADJUSTMENTS, values)?.sendToTarget()
+    }
+
+    /**
      * Get cache render effect list
      * @return current effects
      */
@@ -374,6 +431,17 @@ class RenderManager(
                         mEncodeRender?.initEGLEvn(shareContext)
                         mEncodeRender?.setupSurface(inputSurface)
                         mEncodeRender?.initGLES()
+                        // Sync current adjustment values to new encode render
+                        mScreenRender?.let { sr ->
+                            mEncodeRender?.brightness = sr.brightness
+                            mEncodeRender?.contrast = sr.contrast
+                            mEncodeRender?.saturation = sr.saturation
+                            mEncodeRender?.hue = sr.hue
+                            mEncodeRender?.gamma = sr.gamma
+                            mEncodeRender?.sharpness = sr.sharpness
+                            mEncodeRender?.texelWidth = sr.texelWidth
+                            mEncodeRender?.texelHeight = sr.texelHeight
+                        }
                     }
                 }
                 MSG_GL_RENDER_CODEC_CHANGED_SIZE -> {
@@ -434,13 +502,15 @@ class RenderManager(
         val path = savePath ?: "$mCameraDir/$displayName"
         val width = mWidth
         val height = mHeight
-        // 写入文件
-        // glReadPixels读取的是大端数据，但是我们保存的是小端
-        // 故需要将图片上下颠倒为正
+        // Read raw frame - apply software adjustments
+        android.util.Log.e("CAPTURE_DEBUG", "saveImage: b=$mAdjBrightness c=$mAdjContrast s=$mAdjSaturation g=$mAdjGamma")
+        // (GL shader adjustments on FBO don't reliably persist to glReadPixels on some devices)
         var fos: FileOutputStream? = null
         try {
             fos = FileOutputStream(path)
-            GLBitmapUtils.transFrameBufferToBitmap(mFBOBufferId, width, height).apply {
+            GLBitmapUtils.transFrameBufferToBitmap(mFBOBufferId, width, height).let { rawBitmap ->
+                applyBitmapAdjustments(rawBitmap, mAdjBrightness, mAdjContrast, mAdjSaturation, mAdjGamma)
+            }.apply {
                 compress(Bitmap.CompressFormat.JPEG, 100, fos)
                 recycle()
             }
@@ -512,6 +582,76 @@ class RenderManager(
         fun onSurfaceTextureAvailable(surfaceTexture: SurfaceTexture?)
     }
 
+    /**
+     * Apply brightness, contrast, saturation, gamma to a bitmap in software.
+     * Matches the GPU shader logic for WYSIWYG still captures.
+     */
+    private fun applyBitmapAdjustments(
+        bitmap: Bitmap, brightness: Float, contrast: Float, saturation: Float, gamma: Float
+    ): Bitmap {
+        // Skip if all defaults (1.0)
+        if (Math.abs(brightness - 1.0f) < 0.01f &&
+            Math.abs(contrast - 1.0f) < 0.01f &&
+            Math.abs(saturation - 1.0f) < 0.01f &&
+            Math.abs(gamma - 1.0f) < 0.01f) {
+            return bitmap
+        }
+
+        val w = bitmap.width
+        val h = bitmap.height
+        val pixels = IntArray(w * h)
+        bitmap.getPixels(pixels, 0, w, 0, 0, w, h)
+
+        // Build gamma LUT for speed
+        val gammaLut = if (Math.abs(gamma - 1.0f) > 0.01f) {
+            val invGamma = 1.0f / gamma
+            IntArray(256) { i ->
+                (Math.pow(i / 255.0, invGamma.toDouble()) * 255.0).toInt().coerceIn(0, 255)
+            }
+        } else null
+
+        for (i in pixels.indices) {
+            val pixel = pixels[i]
+            var r = (pixel shr 16) and 0xFF
+            var g = (pixel shr 8) and 0xFF
+            var b = (pixel) and 0xFF
+            val a = (pixel shr 24) and 0xFF
+
+            // 1. Brightness (multiply)
+            var rf = r * brightness / 255.0f
+            var gf = g * brightness / 255.0f
+            var bf = b * brightness / 255.0f
+
+            // 2. Contrast (scale around 0.5)
+            rf = (rf - 0.5f) * contrast + 0.5f
+            gf = (gf - 0.5f) * contrast + 0.5f
+            bf = (bf - 0.5f) * contrast + 0.5f
+
+            // 3. Saturation
+            val luma = 0.2126f * rf + 0.7152f * gf + 0.0722f * bf
+            rf = luma + (rf - luma) * saturation
+            gf = luma + (gf - luma) * saturation
+            bf = luma + (bf - luma) * saturation
+
+            // Clamp to 0-255
+            r = (rf * 255.0f).toInt().coerceIn(0, 255)
+            g = (gf * 255.0f).toInt().coerceIn(0, 255)
+            b = (bf * 255.0f).toInt().coerceIn(0, 255)
+
+            // 4. Gamma (via LUT)
+            if (gammaLut != null) {
+                r = gammaLut[r]
+                g = gammaLut[g]
+                b = gammaLut[b]
+            }
+
+            pixels[i] = (a shl 24) or (r shl 16) or (g shl 8) or b
+        }
+
+        bitmap.setPixels(pixels, 0, w, 0, 0, w, h)
+        return bitmap
+    }
+
     companion object {
         private const val TAG = "RenderManager"
         private const val RENDER_THREAD = "gl_render"
@@ -527,6 +667,7 @@ class RenderManager(
         private const val MSG_GL_REMOVE_EFFECT = 0x07
         private const val MSG_GL_SAVE_IMAGE = 0x08
         private const val MSG_GL_ROUTE_ANGLE = 0x09
+        private const val MSG_GL_SET_ADJUSTMENTS = 0x0A
 
         // codec
         private const val MSG_GL_RENDER_CODEC_INIT = 0x11

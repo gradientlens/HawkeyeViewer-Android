@@ -13,6 +13,6 @@
     <usb-device vendor-id="1908" />  <!-- GEMBIRD -->
     <usb-device vendor-id="1443" />  <!-- Innomedia -->
 
-    <!-- Add your Hawkeye camera vendor ID here when known -->
-    <!-- <usb-device vendor-id="XXXX" product-id="XXXX" /> -->
+    <!-- Hawkeye borescope camera -->
+    <usb-device vendor-id="3039" product-id="32886" />
 </resources>

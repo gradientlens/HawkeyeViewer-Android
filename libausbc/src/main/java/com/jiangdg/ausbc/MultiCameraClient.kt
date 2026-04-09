@@ -268,6 +268,16 @@ class MultiCameraClient(ctx: Context, callback: IDeviceConnectCallBack?) {
         protected var isNeedGLESRender: Boolean = false
         protected var mCtrlBlock: USBMonitor.UsbControlBlock? = null
         protected var mPreviewDataCbList = CopyOnWriteArrayList<IPreviewDataCallBack>()
+
+        /** Callback for applying image adjustments to captured stills (WYSIWYG) */
+        interface ImageAdjustmentApplier {
+            fun applyToFile(path: String)
+        }
+        protected var mImageAdjustmentApplier: ImageAdjustmentApplier? = null
+
+        fun setImageAdjustmentApplier(applier: ImageAdjustmentApplier?) {
+            mImageAdjustmentApplier = applier
+        }
         private val mCacheEffectList by lazy {
             arrayListOf<AbstractEffect>()
         }
@@ -529,6 +539,13 @@ class MultiCameraClient(ctx: Context, callback: IDeviceConnectCallBack?) {
          */
         fun setRotateType(type: RotateType?) {
             mRenderManager?.setRotateType(type)
+        }
+
+        /**
+         * Set software image adjustment parameters (applied via GPU shader)
+         */
+        fun setImageAdjustments(brightness: Float, contrast: Float, saturation: Float, hue: Float, gamma: Float, sharpness: Float = 0.0f) {
+            mRenderManager?.setImageAdjustments(brightness, contrast, saturation, hue, gamma, sharpness)
         }
 
         /**

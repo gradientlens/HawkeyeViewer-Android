@@ -118,6 +118,38 @@
                     android:layout_marginTop="4dp" />
             </LinearLayout>
 
+            <!-- Gallery Button -->
+            <LinearLayout
+                android:id="@+id/galleryButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:gravity="center"
+                android:padding="8dp"
+                android:minWidth="72dp"
+                android:layout_marginStart="4dp"
+                android:background="@drawable/bg_icon_button"
+                android:clickable="true"
+                android:focusable="true">
+
+                <ImageView
+                    android:id="@+id/galleryIcon"
+                    android:layout_width="28dp"
+                    android:layout_height="28dp"
+                    android:src="@drawable/ic_gallery"
+                    app:tint="@color/text_secondary"
+                    android:contentDescription="@string/btn_gallery" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/btn_gallery"
+                    android:textColor="@color/text_secondary"
+                    android:textSize="11sp"
+                    android:textAllCaps="true"
+                    android:layout_marginTop="4dp" />
+            </LinearLayout>
+
             <!-- Adjust/Settings Button -->
             <LinearLayout
                 android:id="@+id/settingsButton"
@@ -306,12 +338,16 @@
 
                     <!-- Brightness -->
                     <LinearLayout
+                        android:id="@+id/brightnessRow"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:orientation="horizontal"
-                        android:gravity="center_vertical">
+                        android:gravity="center_vertical"
+                        android:padding="4dp"
+                        android:background="@drawable/bg_seekbar_row">
 
                         <TextView
+                            android:id="@+id/brightnessLabel"
                             android:layout_width="100dp"
                             android:layout_height="wrap_content"
                             android:text="@string/brightness"
@@ -340,13 +376,17 @@
 
                     <!-- Contrast -->
                     <LinearLayout
+                        android:id="@+id/contrastRow"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:orientation="horizontal"
                         android:gravity="center_vertical"
-                        android:layout_marginTop="10dp">
+                        android:padding="4dp"
+                        android:layout_marginTop="6dp"
+                        android:background="@drawable/bg_seekbar_row">
 
                         <TextView
+                            android:id="@+id/contrastLabel"
                             android:layout_width="100dp"
                             android:layout_height="wrap_content"
                             android:text="@string/contrast"
@@ -375,13 +415,17 @@
 
                     <!-- Saturation -->
                     <LinearLayout
+                        android:id="@+id/saturationRow"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:orientation="horizontal"
                         android:gravity="center_vertical"
-                        android:layout_marginTop="10dp">
+                        android:padding="4dp"
+                        android:layout_marginTop="6dp"
+                        android:background="@drawable/bg_seekbar_row">
 
                         <TextView
+                            android:id="@+id/saturationLabel"
                             android:layout_width="100dp"
                             android:layout_height="wrap_content"
                             android:text="@string/saturation"
@@ -410,13 +454,17 @@
 
                     <!-- Hue -->
                     <LinearLayout
+                        android:id="@+id/hueRow"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:orientation="horizontal"
                         android:gravity="center_vertical"
-                        android:layout_marginTop="10dp">
+                        android:padding="4dp"
+                        android:layout_marginTop="6dp"
+                        android:background="@drawable/bg_seekbar_row">
 
                         <TextView
+                            android:id="@+id/hueLabel"
                             android:layout_width="100dp"
                             android:layout_height="wrap_content"
                             android:text="@string/hue"
@@ -445,13 +493,17 @@
 
                     <!-- Gamma -->
                     <LinearLayout
+                        android:id="@+id/gammaRow"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:orientation="horizontal"
                         android:gravity="center_vertical"
-                        android:layout_marginTop="10dp">
+                        android:padding="4dp"
+                        android:layout_marginTop="6dp"
+                        android:background="@drawable/bg_seekbar_row">
 
                         <TextView
+                            android:id="@+id/gammaLabel"
                             android:layout_width="100dp"
                             android:layout_height="wrap_content"
                             android:text="@string/gamma"
@@ -480,13 +532,17 @@
 
                     <!-- Sharpness -->
                     <LinearLayout
+                        android:id="@+id/sharpnessRow"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:orientation="horizontal"
                         android:gravity="center_vertical"
-                        android:layout_marginTop="10dp">
+                        android:padding="4dp"
+                        android:layout_marginTop="6dp"
+                        android:background="@drawable/bg_seekbar_row">
 
                         <TextView
+                            android:id="@+id/sharpnessLabel"
                             android:layout_width="100dp"
                             android:layout_height="wrap_content"
                             android:text="@string/sharpness"
@@ -580,18 +636,28 @@
                             android:layout_height="wrap_content"
                             android:text="@string/label_mirror"
                             android:textColor="@color/text_secondary"
-                            android:textSize="12sp"
-                            android:buttonTint="@color/hawkeye_primary" />
+                            android:textSize="14sp"
+                            android:padding="8dp"
+                            android:minHeight="48dp"
+                            android:background="@drawable/bg_control_button"
+                            android:buttonTint="@color/hawkeye_primary"
+                            android:focusable="true"
+                            android:nextFocusRight="@+id/flipCheckBox" />
 
                         <CheckBox
                             android:id="@+id/flipCheckBox"
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:layout_marginStart="24dp"
+                            android:layout_marginStart="16dp"
                             android:text="@string/label_flip"
                             android:textColor="@color/text_secondary"
-                            android:textSize="12sp"
-                            android:buttonTint="@color/hawkeye_primary" />
+                            android:textSize="14sp"
+                            android:padding="8dp"
+                            android:minHeight="48dp"
+                            android:background="@drawable/bg_control_button"
+                            android:buttonTint="@color/hawkeye_primary"
+                            android:focusable="true"
+                            android:nextFocusLeft="@+id/mirrorCheckBox" />
                     </LinearLayout>
 
                 </LinearLayout>

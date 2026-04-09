@@ -60,6 +60,9 @@
 
 #include "libuvc/libuvc.h"
 #include "libuvc/libuvc_internal.h"
+#include <android/log.h>
+#define HAWKEYE_TAG "HawkeyeUVC"
+#define HAWKEYE_LOG(...) __android_log_print(ANDROID_LOG_WARN, HAWKEYE_TAG, __VA_ARGS__)
 
 #define UVC_DETACH_ATTACH 0	// set this 1 attach/detach kernel driver by libuvc, set this 0 automatically attach/detach by libusb
 
@@ -308,7 +311,7 @@ uvc_error_t uvc_open(uvc_device_t *dev, uvc_device_handle_t **devh) {
 	internal_devh->is_isight = (desc.idVendor == 0x05ac && desc.idProduct == 0x8501);
 
 	if (internal_devh->info->ctrl_if.bEndpointAddress) {
-		UVC_DEBUG("status check transfer:bEndpointAddress=0x%02x", internal_devh->info->ctrl_if.bEndpointAddress);
+		HAWKEYE_LOG("Setting up interrupt transfer on endpoint 0x%02x", internal_devh->info->ctrl_if.bEndpointAddress);
 		internal_devh->status_xfer = libusb_alloc_transfer(0);
 		if (UNLIKELY(!internal_devh->status_xfer)) {
 			ret = UVC_ERROR_NO_MEM;
@@ -320,14 +323,14 @@ uvc_error_t uvc_open(uvc_device_t *dev, uvc_device_handle_t **devh) {
 				internal_devh->status_buf, sizeof(internal_devh->status_buf),
 				_uvc_status_callback, internal_devh, 0);
 		ret = libusb_submit_transfer(internal_devh->status_xfer);
-		UVC_DEBUG("libusb_submit_transfer() = %d", ret);
+		HAWKEYE_LOG("Interrupt transfer submit result=%d (0=success)", ret);
 
 		if (UNLIKELY(ret)) {
-			LOGE("device has a status interrupt endpoint, but unable to read from it");
+			HAWKEYE_LOG("FAILED to submit interrupt transfer! ret=%d", ret);
 			goto fail;
 		}
 	} else {
-		LOGE("internal_devh->info->ctrl_if.bEndpointAddress is null");
+		HAWKEYE_LOG("WARNING: No interrupt endpoint address found (bEndpointAddress=0)");
 	}
 
 	if (dev->ctx->own_usb_ctx && dev->ctx->open_devices == NULL) {
@@ -1642,10 +1645,11 @@ void uvc_process_control_status(uvc_device_handle_t *devh, unsigned char *data, 
 		return;  /* @todo VideoControl virtual entity interface updates */
 	}
 
+	/* Hawkeye: pass ALL events through to status callback, not just event==0.
+	 * The borescope still button may send event!=0 which was previously filtered out.
+	 * The callback handler will see the event type and can decide what to do. */
 	if (event != 0) {
-		UVC_DEBUG("Unhandled VC event %d", (int) event);
-		UVC_EXIT_VOID();
-		return;
+		UVC_DEBUG("Non-zero VC event %d (passing through)", (int) event);
 	}
 
 	/* printf("bSelector: %d\n", selector); */
@@ -1738,15 +1742,32 @@ void uvc_process_status_xfer(uvc_device_handle_t *devh, struct libusb_transfer *
 
 	UVC_ENTER();
 
-	/* printf("Got transfer of aLen = %d\n", transfer->actual_length); */
-
 	if (transfer->actual_length > 0) {
+		/* Hawkeye: log ALL raw interrupt data for debugging button detection */
+		{
+			int i;
+			int hexlen = (transfer->actual_length < 32 ? transfer->actual_length : 32);
+			char hex[32 * 3 + 1];
+			for (i = 0; i < hexlen; i++) {
+				sprintf(hex + i * 3, "%02X ", transfer->buffer[i]);
+			}
+			hex[hexlen * 3] = '\0';
+			HAWKEYE_LOG("UVC_INTERRUPT raw[%d]: %s", transfer->actual_length, hex);
+		}
+
 		switch (transfer->buffer[0] & 0x0f) {
 			case 1: /* VideoControl interface */
 				uvc_process_control_status(devh, transfer->buffer, transfer->actual_length);
 				break;
 			case 2:  /* VideoStreaming interface */
 				uvc_process_streaming_status(devh, transfer->buffer, transfer->actual_length);
+				break;
+			default:
+				/* Hawkeye: unknown type - still try processing as VideoControl
+				 * in case it's a vendor-specific button event */
+				HAWKEYE_LOG("UVC_INTERRUPT unknown type=%d, trying as VideoControl",
+					 transfer->buffer[0] & 0x0f);
+				uvc_process_control_status(devh, transfer->buffer, transfer->actual_length);
 				break;
 		}
 	}
@@ -1766,7 +1787,7 @@ void _uvc_status_callback(struct libusb_transfer *transfer) {
 	case LIBUSB_TRANSFER_ERROR:
 	case LIBUSB_TRANSFER_CANCELLED:
 	case LIBUSB_TRANSFER_NO_DEVICE:
-		UVC_DEBUG("not processing/resubmitting, status = %d", transfer->status);
+		HAWKEYE_LOG("UVC_INTERRUPT transfer failed status=%d (not resubmitting)", transfer->status);
 		UVC_EXIT_VOID();
 		return;
 	case LIBUSB_TRANSFER_COMPLETED:

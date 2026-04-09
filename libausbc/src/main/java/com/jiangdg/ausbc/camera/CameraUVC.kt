@@ -277,16 +277,14 @@ class CameraUVC(ctx: Context, device: UsbDevice) : MultiCameraClient.ICamera(ctx
                 Logger.w(TAG, "save yuv to jpeg failed.")
                 return@submit
             }
-            // MediaStore insertion disabled — caller handles gallery registration
-            // via proper scoped storage copy.
-            // val values = ContentValues()
-            // values.put(MediaStore.Images.ImageColumns.TITLE, title)
-            // values.put(MediaStore.Images.ImageColumns.DISPLAY_NAME, displayName)
-            // values.put(MediaStore.Images.ImageColumns.DATA, path)
-            // values.put(MediaStore.Images.ImageColumns.DATE_TAKEN, date)
-            // values.put(MediaStore.Images.ImageColumns.LONGITUDE, location?.longitude)
-            // values.put(MediaStore.Images.ImageColumns.LATITUDE, location?.latitude)
-            // ctx.contentResolver?.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values)
+            // Apply image adjustments (WYSIWYG — match preview)
+            mImageAdjustmentApplier?.let { applier ->
+                try {
+                    applier.applyToFile(path)
+                } catch (e: Exception) {
+                    Logger.w(TAG, "Failed to apply adjustments: ${e.message}")
+                }
+            }
             mMainHandler.post {
                 callback.onComplete(path)
             }

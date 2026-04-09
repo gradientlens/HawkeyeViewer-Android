@@ -6,6 +6,16 @@
     <string name="btn_still">STILL</string>
     <string name="btn_video">VIDEO</string>
     <string name="btn_adjust">ADJUST</string>
+    <string name="btn_gallery">GALLERY</string>
+
+    <!-- Gallery -->
+    <string name="gallery_title">Captured Media</string>
+    <string name="gallery_empty">No captures yet</string>
+    <string name="gallery_delete_confirm">Delete this file?</string>
+    <string name="gallery_deleted">File deleted</string>
+    <string name="gallery_delete_failed">Delete failed</string>
+    <string name="gallery_saving_to_usb">Saving to USB storage</string>
+    <string name="gallery_saving_to_internal">Saving to internal storage</string>
 
     <!-- Camera Controls -->
     <string name="btn_start">Start</string>
@@ -17,7 +27,7 @@
     <string name="btn_defaults">Defaults</string>
 
     <!-- Section Headers -->
-    <string name="section_camera">CAMERA</string>
+    <string name="section_camera">ASPECT RATIO</string>
     <string name="section_image">IMAGE</string>
     <string name="section_transform">TRANSFORM</string>
 

@@ -17,18 +17,32 @@ package com.jiangdg.ausbc.render.internal
 
 import android.content.Context
 import android.opengl.EGLContext
+import android.opengl.GLES20
 import android.view.Surface
 import com.jiangdg.ausbc.R
 import com.jiangdg.ausbc.render.env.EGLEvn
 
-/** Inherit from AbstractFboRender
- *      render data to EGL from fbo and encode it
- *
- * @author Created by jiangdg on 2021/12/27
- */
 class EncodeRender(context: Context): AbstractRender(context) {
 
     private var mEgl: EGLEvn? = null
+
+    // Adjustment uniform handles
+    private var mBrightnessHandle = -1
+    private var mContrastHandle = -1
+    private var mSaturationHandle = -1
+    private var mHueHandle = -1
+    private var mGammaHandle = -1
+    private var mSharpnessHandle = -1
+    private var mTexelSizeHandle = -1
+
+    @Volatile var brightness: Float = 1.0f
+    @Volatile var contrast: Float = 1.0f
+    @Volatile var saturation: Float = 1.0f
+    @Volatile var hue: Float = 0.0f
+    @Volatile var gamma: Float = 1.0f
+    @Volatile var sharpness: Float = 0.0f
+    @Volatile var texelWidth: Float = 0.0f
+    @Volatile var texelHeight: Float = 0.0f
 
     fun initEGLEvn(glContext: EGLContext) {
         mEgl = EGLEvn()
@@ -43,6 +57,34 @@ class EncodeRender(context: Context): AbstractRender(context) {
     fun swapBuffers(timeStamp: Long) {
         mEgl?.setPresentationTime(timeStamp)
         mEgl?.swapBuffers()
+    }
+
+    override fun init() {
+        mBrightnessHandle = GLES20.glGetUniformLocation(mProgram, "uBrightness")
+        mContrastHandle = GLES20.glGetUniformLocation(mProgram, "uContrast")
+        mSaturationHandle = GLES20.glGetUniformLocation(mProgram, "uSaturation")
+        mHueHandle = GLES20.glGetUniformLocation(mProgram, "uHue")
+        mGammaHandle = GLES20.glGetUniformLocation(mProgram, "uGamma")
+        mSharpnessHandle = GLES20.glGetUniformLocation(mProgram, "uSharpness")
+        mTexelSizeHandle = GLES20.glGetUniformLocation(mProgram, "uTexelSize")
+    }
+
+    override fun setSize(width: Int, height: Int) {
+        super.setSize(width, height)
+        if (width > 0 && height > 0) {
+            texelWidth = 1.0f / width
+            texelHeight = 1.0f / height
+        }
+    }
+
+    override fun beforeDraw() {
+        if (mBrightnessHandle >= 0) GLES20.glUniform1f(mBrightnessHandle, brightness)
+        if (mContrastHandle >= 0) GLES20.glUniform1f(mContrastHandle, contrast)
+        if (mSaturationHandle >= 0) GLES20.glUniform1f(mSaturationHandle, saturation)
+        if (mHueHandle >= 0) GLES20.glUniform1f(mHueHandle, hue)
+        if (mGammaHandle >= 0) GLES20.glUniform1f(mGammaHandle, gamma)
+        if (mSharpnessHandle >= 0) GLES20.glUniform1f(mSharpnessHandle, sharpness)
+        if (mTexelSizeHandle >= 0) GLES20.glUniform2f(mTexelSizeHandle, texelWidth, texelHeight)
     }
 
     override fun clear() {

@@ -1,0 +1,86 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#000000">
+
+    <!-- Image preview (full-screen) -->
+    <ImageView
+        android:id="@+id/imagePreview"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:scaleType="fitCenter"
+        android:visibility="gone" />
+
+    <!-- Video preview (full-screen) -->
+    <VideoView
+        android:id="@+id/videoPreview"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:layout_gravity="center"
+        android:visibility="gone" />
+
+    <!-- Top bar overlay -->
+    <LinearLayout
+        android:id="@+id/previewTopBar"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:paddingHorizontal="16dp"
+        android:paddingVertical="12dp"
+        android:background="#99000000">
+
+        <!-- Back/close button -->
+        <ImageView
+            android:id="@+id/closeButton"
+            android:layout_width="36dp"
+            android:layout_height="36dp"
+            android:src="@drawable/ic_chevron_down"
+            android:rotation="90"
+            app:tint="#FFFFFF"
+            android:padding="6dp"
+            android:background="@drawable/bg_icon_button"
+            android:clickable="true"
+            android:focusable="true"
+            android:contentDescription="Close"
+            android:nextFocusRight="@+id/previewDeleteButton" />
+
+        <TextView
+            android:id="@+id/previewTitle"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:textColor="#FFFFFF"
+            android:textSize="16sp"
+            android:layout_marginStart="12dp"
+            android:maxLines="1"
+            android:ellipsize="middle" />
+
+        <!-- Delete button -->
+        <ImageView
+            android:id="@+id/previewDeleteButton"
+            android:layout_width="36dp"
+            android:layout_height="36dp"
+            android:src="@drawable/ic_delete"
+            app:tint="#FFFFFF"
+            android:padding="6dp"
+            android:background="@drawable/bg_icon_button"
+            android:clickable="true"
+            android:focusable="true"
+            android:contentDescription="Delete"
+            android:nextFocusLeft="@+id/closeButton" />
+    </LinearLayout>
+
+    <!-- Loading/error text -->
+    <TextView
+        android:id="@+id/previewStatus"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center"
+        android:textColor="#AAAAAA"
+        android:textSize="16sp"
+        android:visibility="gone" />
+</FrameLayout>

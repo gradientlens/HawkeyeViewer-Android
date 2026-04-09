@@ -18,35 +18,76 @@ package com.jiangdg.ausbc.render.internal
 import android.content.Context
 import android.opengl.GLES20
 import android.opengl.Matrix
+import android.util.Log
 import com.jiangdg.ausbc.R
 import kotlin.math.cos
 import kotlin.math.sin
 
-/** Inherit from AbstractFboRender
- *      render preview data with preview_vertex.glsl and base_fragment.glsl
- *
- * @author Created by jiangdg on 2021/12/27
- */
 class CaptureRender(context: Context) : AbstractFboRender(context) {
     private var mMVPMatrixHandle: Int = -1
     private var mMVPMatrix = FloatArray(16)
 
+    // Adjustment uniform handles
+    private var mBrightnessHandle = -1
+    private var mContrastHandle = -1
+    private var mSaturationHandle = -1
+    private var mHueHandle = -1
+    private var mGammaHandle = -1
+    private var mSharpnessHandle = -1
+    private var mTexelSizeHandle = -1
+
+    @Volatile var brightness: Float = 1.0f
+    @Volatile var contrast: Float = 1.0f
+    @Volatile var saturation: Float = 1.0f
+    @Volatile var hue: Float = 0.0f
+    @Volatile var gamma: Float = 1.0f
+    @Volatile var sharpness: Float = 0.0f
+    @Volatile var texelWidth: Float = 0.0f
+    @Volatile var texelHeight: Float = 0.0f
+    private var loggedOnce = false
+
     override fun init() {
         Matrix.setIdentityM(mMVPMatrix, 0)
-        // 上下翻转 (绕x轴180度)
-        // glReadPixels读取的是大端数据，但是我们保存的是小端
-        // 故需要将图片上下颠倒为正
         val radius = (180 * Math.PI / 180.0).toFloat()
         mMVPMatrix[5] *= cos(radius.toDouble()).toFloat()
         mMVPMatrix[6] += (-sin(radius.toDouble())).toFloat()
         mMVPMatrix[9] += sin(radius.toDouble()).toFloat()
         mMVPMatrix[10] *= cos(radius.toDouble()).toFloat()
-        // 获取句柄
         mMVPMatrixHandle = GLES20.glGetUniformLocation(mProgram, "uMVPMatrix")
+
+        mBrightnessHandle = GLES20.glGetUniformLocation(mProgram, "uBrightness")
+        mContrastHandle = GLES20.glGetUniformLocation(mProgram, "uContrast")
+        mSaturationHandle = GLES20.glGetUniformLocation(mProgram, "uSaturation")
+        mHueHandle = GLES20.glGetUniformLocation(mProgram, "uHue")
+        mGammaHandle = GLES20.glGetUniformLocation(mProgram, "uGamma")
+        mSharpnessHandle = GLES20.glGetUniformLocation(mProgram, "uSharpness")
+        mTexelSizeHandle = GLES20.glGetUniformLocation(mProgram, "uTexelSize")
+        Log.i("CaptureRender", "init: program=$mProgram brightness=$mBrightnessHandle contrast=$mContrastHandle sat=$mSaturationHandle hue=$mHueHandle gamma=$mGammaHandle sharp=$mSharpnessHandle texel=$mTexelSizeHandle")
+    }
+
+    override fun setSize(width: Int, height: Int) {
+        super.setSize(width, height)
+        if (width > 0 && height > 0) {
+            texelWidth = 1.0f / width
+            texelHeight = 1.0f / height
+        }
     }
 
     override fun beforeDraw() {
         GLES20.glUniformMatrix4fv(mMVPMatrixHandle, 1, false, mMVPMatrix, 0)
+
+        if (mBrightnessHandle >= 0) GLES20.glUniform1f(mBrightnessHandle, brightness)
+        if (mContrastHandle >= 0) GLES20.glUniform1f(mContrastHandle, contrast)
+        if (mSaturationHandle >= 0) GLES20.glUniform1f(mSaturationHandle, saturation)
+        if (mHueHandle >= 0) GLES20.glUniform1f(mHueHandle, hue)
+        if (mGammaHandle >= 0) GLES20.glUniform1f(mGammaHandle, gamma)
+        if (mSharpnessHandle >= 0) GLES20.glUniform1f(mSharpnessHandle, sharpness)
+        if (mTexelSizeHandle >= 0) GLES20.glUniform2f(mTexelSizeHandle, texelWidth, texelHeight)
+
+        if (!loggedOnce && brightness != 1.0f) {
+            Log.i("CaptureRender", "beforeDraw: b=$brightness c=$contrast s=$saturation h=$hue g=$gamma sh=$sharpness texel=${texelWidth}x${texelHeight}")
+            loggedOnce = true
+        }
     }
 
     override fun getVertexSourceId(): Int = R.raw.capture_vertex

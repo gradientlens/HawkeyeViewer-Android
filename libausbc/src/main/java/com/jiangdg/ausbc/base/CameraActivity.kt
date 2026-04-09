@@ -288,6 +288,23 @@ abstract class CameraActivity: BaseActivity(), ICameraStateCallBack {
     protected fun isCameraOpened() = getCurrentCamera()?.isCameraOpened()  ?: false
 
     /**
+     * Set software image adjustments (GPU shader-based)
+     *
+     * @param brightness 0.0-2.0, default 1.0
+     * @param contrast 0.0-2.0, default 1.0
+     * @param saturation 0.0-3.0, default 1.0
+     * @param hue rotation in radians, default 0.0
+     * @param gamma 0.2-3.0, default 1.0
+     */
+    protected fun setImageAdjustments(brightness: Float, contrast: Float, saturation: Float, hue: Float, gamma: Float, sharpness: Float = 0.0f) {
+        getCurrentCamera()?.setImageAdjustments(brightness, contrast, saturation, hue, gamma, sharpness)
+    }
+
+    protected fun setImageAdjustmentApplier(applier: MultiCameraClient.ICamera.ImageAdjustmentApplier?) {
+        getCurrentCamera()?.setImageAdjustmentApplier(applier)
+    }
+
+    /**
      * Update resolution
      *
      * @param width camera preview width

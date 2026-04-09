@@ -7,7 +7,14 @@
       "Bash(./gradlew :app:compileMobileDebugKotlin:*)",
       "Bash(git add:*)",
       "Bash(git commit:*)",
-      "Bash(./gradlew assembleMobileDebug:*)"
+      "Bash(./gradlew assembleMobileDebug:*)",
+      "Bash(tree:*)",
+      "Bash(./gradlew assembleDebug:*)",
+      "Bash(adb install:*)",
+      "Bash(./gradlew installMobileDebug:*)",
+      "Bash(./gradlew :app:installMobileDebug:*)",
+      "Bash(adb shell cat:*)",
+      "Bash(cmd /c \"C:\\\\Users\\\\holmes\\\\AppData\\\\Local\\\\Android\\\\Sdk\\\\platform-tools\\\\adb.exe shell cat /sdcard/Android/data/com.hawkeyeborescopes.viewer/files/hawkeye_debug.log\")"
     ],
     "deny": [],
     "ask": []

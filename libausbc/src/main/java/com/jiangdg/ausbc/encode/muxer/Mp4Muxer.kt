@@ -201,7 +201,8 @@ class Mp4Muxer(
             mVideoTrackerIndex = -1
             mAudioPts = 0L
             mVideoPts = 0L
-            insertDCIM(mContext, path)
+            // MediaStore insertion disabled — our gallery manages files directly
+            // insertDCIM(mContext, path)
 
             path = "${mOriginalPath}_${++mFileSubIndex}.mp4"
             mMediaMuxer = MediaMuxer(path!!, MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4)
@@ -223,7 +224,8 @@ class Mp4Muxer(
         try {
             mMediaMuxer?.stop()
             mMediaMuxer?.release()
-            insertDCIM(mContext, path, true)
+            // MediaStore insertion disabled — our gallery manages files directly
+            // insertDCIM(mContext, path, true)
         } catch (e: Exception) {
             mMainHandler.post {
                 mCaptureCallBack?.onError(e.localizedMessage)

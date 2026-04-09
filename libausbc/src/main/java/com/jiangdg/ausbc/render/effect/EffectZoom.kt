@@ -46,7 +46,7 @@ class EffectZoom(context: Context) : AbstractEffect(context) {
 
     override fun getVertexSourceId(): Int = R.raw.effect_zoom_vertex
 
-    override fun getFragmentSourceId(): Int  = R.raw.base_fragment
+    override fun getFragmentSourceId(): Int  = R.raw.passthrough_fragment
 
     companion object {
         const val ID = 300
