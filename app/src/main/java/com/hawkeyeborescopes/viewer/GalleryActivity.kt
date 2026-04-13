@@ -13,6 +13,7 @@ import android.view.KeyEvent
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.widget.CheckBox
 import android.widget.ImageView
 import android.widget.TextView
 import android.widget.Toast
@@ -20,6 +21,8 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.recyclerview.widget.GridLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import java.io.File
+import java.io.FileInputStream
+import java.io.FileOutputStream
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -28,9 +31,7 @@ class GalleryActivity : AppCompatActivity() {
 
     companion object {
         private const val TAG = "HawkeyeGallery"
-        /** Extra key: pass in the base storage dir (from getExternalFilesDir) */
         const val EXTRA_STORAGE_DIR = "storage_dir"
-        /** Extra key: label for the storage type (e.g. "Internal" or "USB") */
         const val EXTRA_STORAGE_LABEL = "storage_label"
     }
 
@@ -39,10 +40,21 @@ class GalleryActivity : AppCompatActivity() {
     private lateinit var itemCount: TextView
     private lateinit var storageIndicator: View
     private lateinit var storageLabel: TextView
+    private lateinit var selectButton: TextView
+    private lateinit var actionBar: View
+    private lateinit var selectionCount: TextView
+    private lateinit var selectAllButton: TextView
+    private lateinit var deleteSelectedButton: TextView
+    private lateinit var moveToUsbButton: TextView
+    private lateinit var cancelSelectButton: TextView
 
     private val mediaFiles = mutableListOf<MediaItem>()
     private lateinit var adapter: MediaAdapter
     private var storageDir: File? = null
+
+    // Selection state
+    private var isSelectMode = false
+    private val selectedPositions = mutableSetOf<Int>()
 
     data class MediaItem(
         val file: File,
@@ -50,7 +62,7 @@ class GalleryActivity : AppCompatActivity() {
         val name: String,
         val sizeStr: String,
         val dateStr: String,
-        val storageTag: String  // "Internal" or "USB"
+        val storageTag: String
     )
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -62,8 +74,14 @@ class GalleryActivity : AppCompatActivity() {
         itemCount = findViewById(R.id.itemCount)
         storageIndicator = findViewById(R.id.storageIndicator)
         storageLabel = findViewById(R.id.storageLabel)
+        selectButton = findViewById(R.id.selectButton)
+        actionBar = findViewById(R.id.actionBar)
+        selectionCount = findViewById(R.id.selectionCount)
+        selectAllButton = findViewById(R.id.selectAllButton)
+        deleteSelectedButton = findViewById(R.id.deleteSelectedButton)
+        moveToUsbButton = findViewById(R.id.moveToUsbButton)
+        cancelSelectButton = findViewById(R.id.cancelSelectButton)
 
-        // Get storage directory from intent, or use default
         val storagePath = intent.getStringExtra(EXTRA_STORAGE_DIR)
         storageDir = if (storagePath != null) File(storagePath) else getExternalFilesDir(null)
 
@@ -74,11 +92,23 @@ class GalleryActivity : AppCompatActivity() {
         }
 
         // Back button
-        findViewById<ImageView>(R.id.backButton).setOnClickListener {
-            finish()
+        findViewById<ImageView>(R.id.backButton).setOnClickListener { finish() }
+
+        // Select button
+        selectButton.setOnClickListener { enterSelectMode() }
+
+        // Action bar buttons
+        selectAllButton.setOnClickListener { toggleSelectAll() }
+        deleteSelectedButton.setOnClickListener { deleteSelected() }
+        moveToUsbButton.setOnClickListener { moveSelectedToUsb() }
+        cancelSelectButton.setOnClickListener { exitSelectMode() }
+
+        // Show "Move to USB" only if USB storage is available
+        if (hasUsbStorage()) {
+            moveToUsbButton.visibility = View.VISIBLE
         }
 
-        // Setup grid — 3 columns for landscape/tablet, 2 for phone portrait
+        // Setup grid
         val spanCount = if (resources.configuration.screenWidthDp >= 600) 4 else 3
         mediaGrid.layoutManager = GridLayoutManager(this, spanCount)
         adapter = MediaAdapter()
@@ -89,6 +119,10 @@ class GalleryActivity : AppCompatActivity() {
 
     override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
         if (keyCode == KeyEvent.KEYCODE_BACK || keyCode == KeyEvent.KEYCODE_ESCAPE) {
+            if (isSelectMode) {
+                exitSelectMode()
+                return true
+            }
             finish()
             return true
         }
@@ -97,17 +131,199 @@ class GalleryActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
-        // Refresh list when returning from preview (file may have been deleted)
         if (::adapter.isInitialized) {
+            // Refresh: picks up new files, drops files from removed USB, etc.
+            if (isSelectMode) exitSelectMode()
             loadMedia()
+            // Update "Move to USB" visibility in case USB was added/removed
+            moveToUsbButton.visibility = if (hasUsbStorage()) View.VISIBLE else View.GONE
         }
     }
+
+    // ========================
+    // Select Mode
+    // ========================
+
+    private fun enterSelectMode() {
+        isSelectMode = true
+        selectedPositions.clear()
+        selectButton.text = getString(R.string.gallery_cancel)
+        selectButton.setOnClickListener { exitSelectMode() }
+        actionBar.visibility = View.VISIBLE
+        updateSelectionCount()
+        adapter.notifyDataSetChanged()
+    }
+
+    private fun exitSelectMode() {
+        isSelectMode = false
+        selectedPositions.clear()
+        selectButton.text = getString(R.string.gallery_select)
+        selectButton.setOnClickListener { enterSelectMode() }
+        actionBar.visibility = View.GONE
+        adapter.notifyDataSetChanged()
+    }
+
+    private fun toggleSelection(position: Int) {
+        if (selectedPositions.contains(position)) {
+            selectedPositions.remove(position)
+        } else {
+            selectedPositions.add(position)
+        }
+        adapter.notifyItemChanged(position)
+        updateSelectionCount()
+    }
+
+    private fun toggleSelectAll() {
+        if (selectedPositions.size == mediaFiles.size) {
+            // Deselect all
+            selectedPositions.clear()
+        } else {
+            // Select all
+            selectedPositions.clear()
+            for (i in mediaFiles.indices) {
+                selectedPositions.add(i)
+            }
+        }
+        adapter.notifyDataSetChanged()
+        updateSelectionCount()
+    }
+
+    private fun updateSelectionCount() {
+        val count = selectedPositions.size
+        selectionCount.text = getString(R.string.gallery_selected_count, count)
+        deleteSelectedButton.alpha = if (count > 0) 1.0f else 0.4f
+        moveToUsbButton.alpha = if (count > 0) 1.0f else 0.4f
+    }
+
+    // ========================
+    // Batch Operations
+    // ========================
+
+    private fun deleteSelected() {
+        val count = selectedPositions.size
+        if (count == 0) return
+
+        AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+            .setTitle("Delete")
+            .setMessage("Delete $count file${if (count != 1) "s" else ""}?")
+            .setPositiveButton("Delete") { _, _ ->
+                // Delete in reverse order to maintain valid positions
+                val sorted = selectedPositions.sortedDescending()
+                var deleted = 0
+                for (pos in sorted) {
+                    if (pos < mediaFiles.size) {
+                        val item = mediaFiles[pos]
+                        try {
+                            if (item.file.delete()) {
+                                removeFromMediaStore(item)
+                                mediaFiles.removeAt(pos)
+                                deleted++
+                            }
+                        } catch (e: Exception) {
+                            Log.e(TAG, "Failed to delete ${item.name}: ${e.message}")
+                        }
+                    }
+                }
+                selectedPositions.clear()
+                adapter.notifyDataSetChanged()
+                updateCountAndEmpty()
+                updateSelectionCount()
+                Toast.makeText(this, "$deleted file${if (deleted != 1) "s" else ""} deleted", Toast.LENGTH_SHORT).show()
+                if (mediaFiles.isEmpty()) {
+                    exitSelectMode()
+                }
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    private fun moveSelectedToUsb() {
+        val count = selectedPositions.size
+        if (count == 0) return
+
+        val usbDir = getUsbStorageBase() ?: run {
+            Toast.makeText(this, "No USB storage found", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+            .setTitle("Move to USB")
+            .setMessage("Move $count file${if (count != 1) "s" else ""} to USB storage?")
+            .setPositiveButton("Move") { _, _ ->
+                val sorted = selectedPositions.sortedDescending()
+                var moved = 0
+                for (pos in sorted) {
+                    if (pos < mediaFiles.size) {
+                        val item = mediaFiles[pos]
+                        try {
+                            val subDir = if (item.isVideo) "Movies" else "Pictures"
+                            val destDir = File(usbDir, subDir)
+                            if (!destDir.exists()) destDir.mkdirs()
+                            val destFile = File(destDir, item.name)
+
+                            // Copy file
+                            FileInputStream(item.file).use { input ->
+                                FileOutputStream(destFile).use { output ->
+                                    input.copyTo(output)
+                                }
+                            }
+
+                            // Verify copy succeeded, then delete original
+                            if (destFile.exists() && destFile.length() == item.file.length()) {
+                                item.file.delete()
+                                removeFromMediaStore(item)
+                                mediaFiles.removeAt(pos)
+                                moved++
+                            } else {
+                                destFile.delete() // Clean up failed copy
+                                Log.e(TAG, "Move failed for ${item.name}: size mismatch")
+                            }
+                        } catch (e: Exception) {
+                            Log.e(TAG, "Move failed for ${item.name}: ${e.message}")
+                        }
+                    }
+                }
+                selectedPositions.clear()
+                // Reload to pick up files in new location
+                loadMedia()
+                updateSelectionCount()
+                Toast.makeText(this, "$moved file${if (moved != 1) "s" else ""} moved to USB", Toast.LENGTH_SHORT).show()
+                if (mediaFiles.isEmpty()) {
+                    exitSelectMode()
+                }
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    // ========================
+    // USB Storage Detection
+    // ========================
+
+    private fun hasUsbStorage(): Boolean {
+        val dirs = getExternalFilesDirs(null)
+        return dirs.size > 1 && dirs.drop(1).any { it?.canWrite() == true }
+    }
+
+    private fun getUsbStorageBase(): File? {
+        val dirs = getExternalFilesDirs(null)
+        if (dirs.size > 1) {
+            for (i in 1 until dirs.size) {
+                val dir = dirs[i]
+                if (dir != null && dir.canWrite()) return dir
+            }
+        }
+        return null
+    }
+
+    // ========================
+    // Media Loading
+    // ========================
 
     private fun loadMedia() {
         mediaFiles.clear()
         val dateFmt = SimpleDateFormat("MMM dd, yyyy HH:mm", Locale.US)
 
-        // Scan all available storage locations (internal + USB/removable)
         val allDirs = getExternalFilesDirs(null)
         val scannedPaths = mutableSetOf<String>()
         val internalPath = allDirs.firstOrNull()?.absolutePath ?: ""
@@ -119,46 +335,42 @@ class GalleryActivity : AppCompatActivity() {
             scanMediaDir(baseDir, "Movies", ".mp4", true, dateFmt, scannedPaths, tag)
         }
 
-        // Also scan the specific dir passed via intent (in case it's different)
         storageDir?.let { baseDir ->
             val tag = if (baseDir.absolutePath == internalPath) "Internal" else "USB"
             scanMediaDir(baseDir, "Pictures", ".jpg", false, dateFmt, scannedPaths, tag)
             scanMediaDir(baseDir, "Movies", ".mp4", true, dateFmt, scannedPaths, tag)
         }
 
-        // Sort newest first
         mediaFiles.sortByDescending { it.file.lastModified() }
-
         adapter.notifyDataSetChanged()
         updateCountAndEmpty()
     }
 
     private fun scanMediaDir(
-        baseDir: File,
-        subDir: String,
-        extension: String,
-        isVideo: Boolean,
-        dateFmt: SimpleDateFormat,
-        scannedPaths: MutableSet<String>,
-        storageTag: String
+        baseDir: File, subDir: String, extension: String,
+        isVideo: Boolean, dateFmt: SimpleDateFormat,
+        scannedPaths: MutableSet<String>, storageTag: String
     ) {
-        val dir = File(baseDir, subDir)
-        if (!dir.exists()) return
-        dir.listFiles()?.filter {
-            it.isFile && it.name.endsWith(extension, true)
-        }?.forEach { file ->
-            val path = file.absolutePath
-            if (path !in scannedPaths) {
-                scannedPaths.add(path)
-                mediaFiles.add(MediaItem(
-                    file = file,
-                    isVideo = isVideo,
-                    name = file.name,
-                    sizeStr = formatFileSize(file.length()),
-                    dateStr = dateFmt.format(Date(file.lastModified())),
-                    storageTag = storageTag
-                ))
+        try {
+            val dir = File(baseDir, subDir)
+            if (!dir.exists()) return
+            dir.listFiles()?.filter {
+                it.isFile && it.name.endsWith(extension, true) && it.length() > 0
+            }?.forEach { file ->
+                val path = file.absolutePath
+                if (path !in scannedPaths) {
+                    scannedPaths.add(path)
+                    mediaFiles.add(MediaItem(
+                        file = file, isVideo = isVideo, name = file.name,
+                        sizeStr = formatFileSize(file.length()),
+                        dateStr = dateFmt.format(Date(file.lastModified())),
+                        storageTag = storageTag
+                    ))
+                }
             }
+        } catch (e: Exception) {
+            // Storage may have been removed — skip this directory
+            Log.w(TAG, "Failed to scan $baseDir/$subDir: ${e.message}")
         }
     }
 
@@ -187,6 +399,10 @@ class GalleryActivity : AppCompatActivity() {
         }
     }
 
+    // ========================
+    // Single Item Operations
+    // ========================
+
     private fun deleteItem(position: Int) {
         if (position < 0 || position >= mediaFiles.size) return
         val item = mediaFiles[position]
@@ -196,12 +412,8 @@ class GalleryActivity : AppCompatActivity() {
             .setMessage("Delete ${item.name}?\n${item.sizeStr} - ${item.dateStr}")
             .setPositiveButton("Delete") { _, _ ->
                 try {
-                    // Delete the app-private copy
                     val deleted = item.file.delete()
-
-                    // Also remove from MediaStore if it was registered there
                     removeFromMediaStore(item)
-
                     if (deleted) {
                         mediaFiles.removeAt(position)
                         adapter.notifyItemRemoved(position)
@@ -227,7 +439,6 @@ class GalleryActivity : AppCompatActivity() {
             } else {
                 MediaStore.Images.Media.EXTERNAL_CONTENT_URI
             }
-            // Try to find and delete by display name
             val selection = "${MediaStore.MediaColumns.DISPLAY_NAME} = ?"
             val selectionArgs = arrayOf(item.name)
             val deleted = contentResolver.delete(collection, selection, selectionArgs)
@@ -240,6 +451,11 @@ class GalleryActivity : AppCompatActivity() {
     }
 
     private fun openItem(item: MediaItem) {
+        if (!item.file.exists()) {
+            Toast.makeText(this, "File no longer available", Toast.LENGTH_SHORT).show()
+            loadMedia()
+            return
+        }
         val intent = Intent(this, MediaPreviewActivity::class.java).apply {
             putExtra(MediaPreviewActivity.EXTRA_FILE_PATH, item.file.absolutePath)
             putExtra(MediaPreviewActivity.EXTRA_IS_VIDEO, item.isVideo)
@@ -260,6 +476,7 @@ class GalleryActivity : AppCompatActivity() {
             val fileName: TextView = view.findViewById(R.id.fileName)
             val fileInfo: TextView = view.findViewById(R.id.fileInfo)
             val deleteButton: ImageView = view.findViewById(R.id.deleteButton)
+            val selectCheckBox: CheckBox = view.findViewById(R.id.selectCheckBox)
             val container: View = view.findViewById(R.id.itemContainer)
         }
 
@@ -276,31 +493,44 @@ class GalleryActivity : AppCompatActivity() {
             holder.fileInfo.text = "[${item.storageTag}]  ${item.sizeStr}  ${item.dateStr}"
             holder.videoOverlay.visibility = if (item.isVideo) View.VISIBLE else View.GONE
 
-            // Load thumbnail
             loadThumbnail(holder.thumbnail, item)
 
-            // Click to open/view
-            holder.container.setOnClickListener {
-                openItem(item)
-            }
+            if (isSelectMode) {
+                // Select mode: show checkbox, hide delete button
+                holder.selectCheckBox.visibility = View.VISIBLE
+                holder.selectCheckBox.isChecked = selectedPositions.contains(position)
+                holder.deleteButton.visibility = View.GONE
 
-            // Delete button
-            holder.deleteButton.setOnClickListener {
-                deleteItem(holder.adapterPosition)
-            }
+                holder.container.setOnClickListener {
+                    toggleSelection(holder.adapterPosition)
+                }
+                holder.container.setOnLongClickListener { false }
+            } else {
+                // Normal mode: hide checkbox, show delete button
+                holder.selectCheckBox.visibility = View.GONE
+                holder.deleteButton.visibility = View.VISIBLE
 
-            // D-pad: handle select/enter as open, and long-press as delete
-            holder.container.setOnLongClickListener {
-                deleteItem(holder.adapterPosition)
-                true
+                holder.container.setOnClickListener {
+                    openItem(item)
+                }
+                holder.deleteButton.setOnClickListener {
+                    deleteItem(holder.adapterPosition)
+                }
+                holder.container.setOnLongClickListener {
+                    deleteItem(holder.adapterPosition)
+                    true
+                }
             }
         }
 
         override fun getItemCount() = mediaFiles.size
     }
 
+    // ========================
+    // Thumbnail Loading
+    // ========================
+
     private fun loadThumbnail(imageView: ImageView, item: MediaItem) {
-        // Load thumbnails on background thread
         Thread {
             try {
                 val bitmap = if (item.isVideo) {
@@ -314,10 +544,7 @@ class GalleryActivity : AppCompatActivity() {
                         )
                     }
                 } else {
-                    // For images, decode a scaled-down version
-                    val options = BitmapFactory.Options().apply {
-                        inJustDecodeBounds = true
-                    }
+                    val options = BitmapFactory.Options().apply { inJustDecodeBounds = true }
                     BitmapFactory.decodeFile(item.file.absolutePath, options)
                     options.inSampleSize = calculateInSampleSize(options, 320, 320)
                     options.inJustDecodeBounds = false

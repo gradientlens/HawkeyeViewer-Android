@@ -16,6 +16,7 @@
     <color name="text_secondary">#cfcfcf</color>
     <color name="text_tertiary">#9aa</color>
     <color name="text_value">#837E7C</color>
+    <color name="text_disabled">#555555</color>
 
     <!-- Status Colors -->
     <color name="status_ok">#79d08a</color>

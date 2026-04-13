@@ -32,6 +32,9 @@ class ScreenRender(context: Context) : AbstractRender(context) {
     private var mGammaHandle = -1
     private var mSharpnessHandle = -1
     private var mTexelSizeHandle = -1
+    private var mZoomHandle = -1
+    private var mPanHandle = -1
+    private var mCropZoomHandle = -1
 
     // Current adjustment values (defaults = no change)
     @Volatile var brightness: Float = 1.0f
@@ -42,6 +45,11 @@ class ScreenRender(context: Context) : AbstractRender(context) {
     @Volatile var sharpness: Float = 0.0f
     @Volatile var texelWidth: Float = 0.0f
     @Volatile var texelHeight: Float = 0.0f
+    @Volatile var zoom: Float = 1.0f
+    @Volatile var panX: Float = 0.0f
+    @Volatile var panY: Float = 0.0f
+    @Volatile var cropZoomX: Float = 1.0f
+    @Volatile var cropZoomY: Float = 1.0f
 
     fun initEGLEvn() {
         mEgl = EGLEvn()
@@ -68,6 +76,9 @@ class ScreenRender(context: Context) : AbstractRender(context) {
         mGammaHandle = GLES20.glGetUniformLocation(mProgram, "uGamma")
         mSharpnessHandle = GLES20.glGetUniformLocation(mProgram, "uSharpness")
         mTexelSizeHandle = GLES20.glGetUniformLocation(mProgram, "uTexelSize")
+        mZoomHandle = GLES20.glGetUniformLocation(mProgram, "uZoom")
+        mPanHandle = GLES20.glGetUniformLocation(mProgram, "uPan")
+        mCropZoomHandle = GLES20.glGetUniformLocation(mProgram, "uCropZoom")
     }
 
     override fun setSize(width: Int, height: Int) {
@@ -86,6 +97,9 @@ class ScreenRender(context: Context) : AbstractRender(context) {
         if (mGammaHandle >= 0) GLES20.glUniform1f(mGammaHandle, gamma)
         if (mSharpnessHandle >= 0) GLES20.glUniform1f(mSharpnessHandle, sharpness)
         if (mTexelSizeHandle >= 0) GLES20.glUniform2f(mTexelSizeHandle, texelWidth, texelHeight)
+        if (mZoomHandle >= 0) GLES20.glUniform1f(mZoomHandle, zoom)
+        if (mPanHandle >= 0) GLES20.glUniform2f(mPanHandle, panX, panY)
+        if (mCropZoomHandle >= 0) GLES20.glUniform2f(mCropZoomHandle, cropZoomX, cropZoomY)
     }
 
     override fun clear() {

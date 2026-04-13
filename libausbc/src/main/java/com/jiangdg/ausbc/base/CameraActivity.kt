@@ -304,6 +304,14 @@ abstract class CameraActivity: BaseActivity(), ICameraStateCallBack {
         getCurrentCamera()?.setImageAdjustmentApplier(applier)
     }
 
+    protected fun setZoomPan(zoom: Float, panX: Float, panY: Float) {
+        getCurrentCamera()?.setZoomPan(zoom, panX, panY)
+    }
+
+    protected fun setCropZoom(cropZoomX: Float, cropZoomY: Float) {
+        getCurrentCamera()?.setCropZoom(cropZoomX, cropZoomY)
+    }
+
     /**
      * Update resolution
      *

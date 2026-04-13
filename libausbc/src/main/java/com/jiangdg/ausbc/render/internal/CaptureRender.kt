@@ -35,6 +35,9 @@ class CaptureRender(context: Context) : AbstractFboRender(context) {
     private var mGammaHandle = -1
     private var mSharpnessHandle = -1
     private var mTexelSizeHandle = -1
+    private var mZoomHandle = -1
+    private var mPanHandle = -1
+    private var mCropZoomHandle = -1
 
     @Volatile var brightness: Float = 1.0f
     @Volatile var contrast: Float = 1.0f
@@ -44,6 +47,11 @@ class CaptureRender(context: Context) : AbstractFboRender(context) {
     @Volatile var sharpness: Float = 0.0f
     @Volatile var texelWidth: Float = 0.0f
     @Volatile var texelHeight: Float = 0.0f
+    @Volatile var zoom: Float = 1.0f
+    @Volatile var panX: Float = 0.0f
+    @Volatile var panY: Float = 0.0f
+    @Volatile var cropZoomX: Float = 1.0f
+    @Volatile var cropZoomY: Float = 1.0f
     private var loggedOnce = false
 
     override fun init() {
@@ -62,6 +70,9 @@ class CaptureRender(context: Context) : AbstractFboRender(context) {
         mGammaHandle = GLES20.glGetUniformLocation(mProgram, "uGamma")
         mSharpnessHandle = GLES20.glGetUniformLocation(mProgram, "uSharpness")
         mTexelSizeHandle = GLES20.glGetUniformLocation(mProgram, "uTexelSize")
+        mZoomHandle = GLES20.glGetUniformLocation(mProgram, "uZoom")
+        mPanHandle = GLES20.glGetUniformLocation(mProgram, "uPan")
+        mCropZoomHandle = GLES20.glGetUniformLocation(mProgram, "uCropZoom")
         Log.i("CaptureRender", "init: program=$mProgram brightness=$mBrightnessHandle contrast=$mContrastHandle sat=$mSaturationHandle hue=$mHueHandle gamma=$mGammaHandle sharp=$mSharpnessHandle texel=$mTexelSizeHandle")
     }
 
@@ -83,6 +94,9 @@ class CaptureRender(context: Context) : AbstractFboRender(context) {
         if (mGammaHandle >= 0) GLES20.glUniform1f(mGammaHandle, gamma)
         if (mSharpnessHandle >= 0) GLES20.glUniform1f(mSharpnessHandle, sharpness)
         if (mTexelSizeHandle >= 0) GLES20.glUniform2f(mTexelSizeHandle, texelWidth, texelHeight)
+        if (mZoomHandle >= 0) GLES20.glUniform1f(mZoomHandle, zoom)
+        if (mPanHandle >= 0) GLES20.glUniform2f(mPanHandle, panX, panY)
+        if (mCropZoomHandle >= 0) GLES20.glUniform2f(mCropZoomHandle, cropZoomX, cropZoomY)
 
         if (!loggedOnce && brightness != 1.0f) {
             Log.i("CaptureRender", "beforeDraw: b=$brightness c=$contrast s=$saturation h=$hue g=$gamma sh=$sharpness texel=${texelWidth}x${texelHeight}")

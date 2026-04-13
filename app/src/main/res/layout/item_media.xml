@@ -16,7 +16,7 @@
         android:focusable="true"
         android:focusableInTouchMode="false">
 
-        <!-- Thumbnail with video overlay -->
+        <!-- Thumbnail with video overlay and selection checkbox -->
         <FrameLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content">
@@ -36,6 +36,18 @@
                 android:layout_gravity="center"
                 android:src="@drawable/ic_play"
                 app:tint="#CCFFFFFF"
+                android:visibility="gone" />
+
+            <!-- Selection checkbox (visible in select mode) -->
+            <CheckBox
+                android:id="@+id/selectCheckBox"
+                android:layout_width="32dp"
+                android:layout_height="32dp"
+                android:layout_gravity="top|start"
+                android:layout_margin="4dp"
+                android:buttonTint="@color/hawkeye_primary"
+                android:clickable="false"
+                android:focusable="false"
                 android:visibility="gone" />
         </FrameLayout>
 
@@ -81,7 +93,7 @@
                 app:tint="@color/text_secondary"
                 android:background="@drawable/bg_icon_button"
                 android:clickable="true"
-                android:focusable="true"
+                android:focusable="false"
                 android:contentDescription="Delete" />
         </LinearLayout>
     </LinearLayout>

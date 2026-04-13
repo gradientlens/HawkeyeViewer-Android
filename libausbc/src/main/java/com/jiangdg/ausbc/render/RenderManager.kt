@@ -239,6 +239,37 @@ class RenderManager(
                     }
                 }
             }
+            MSG_GL_SET_ZOOM_PAN -> {
+                (msg.obj as? FloatArray)?.let { values ->
+                    if (values.size >= 3) {
+                        mScreenRender?.zoom = values[0]
+                        mScreenRender?.panX = values[1]
+                        mScreenRender?.panY = values[2]
+
+                        mCaptureRender?.zoom = values[0]
+                        mCaptureRender?.panX = values[1]
+                        mCaptureRender?.panY = values[2]
+
+                        mEncodeRender?.zoom = values[0]
+                        mEncodeRender?.panX = values[1]
+                        mEncodeRender?.panY = values[2]
+                    }
+                }
+            }
+            MSG_GL_SET_CROP_ZOOM -> {
+                (msg.obj as? FloatArray)?.let { values ->
+                    if (values.size >= 2) {
+                        mScreenRender?.cropZoomX = values[0]
+                        mScreenRender?.cropZoomY = values[1]
+
+                        mCaptureRender?.cropZoomX = values[0]
+                        mCaptureRender?.cropZoomY = values[1]
+
+                        mEncodeRender?.cropZoomX = values[0]
+                        mEncodeRender?.cropZoomY = values[1]
+                    }
+                }
+            }
             MSG_GL_RELEASE -> {
                 EventBus.with<Boolean>(BusKey.KEY_RENDER_READY).postMessage(false)
                 mEffectList.forEach { effect ->
@@ -393,6 +424,31 @@ class RenderManager(
     fun setImageAdjustments(brightness: Float, contrast: Float, saturation: Float, hue: Float, gamma: Float, sharpness: Float = 0.0f) {
         val values = floatArrayOf(brightness, contrast, saturation, hue, gamma, sharpness)
         mRenderHandler?.obtainMessage(MSG_GL_SET_ADJUSTMENTS, values)?.sendToTarget()
+    }
+
+    /**
+     * Set zoom and pan (applied via GPU vertex shader on texture coordinates)
+     *
+     * @param zoom 1.0-5.0, default 1.0 (no zoom)
+     * @param panX normalized pan offset X, clamped by caller
+     * @param panY normalized pan offset Y, clamped by caller
+     */
+    fun setZoomPan(zoom: Float, panX: Float, panY: Float) {
+        val values = floatArrayOf(zoom, panX, panY)
+        mRenderHandler?.obtainMessage(MSG_GL_SET_ZOOM_PAN, values)?.sendToTarget()
+    }
+
+    /**
+     * Set crop zoom for aspect ratio center-crop.
+     * When the view aspect ratio differs from the camera source,
+     * this crops the source from center instead of stretching.
+     *
+     * @param cropZoomX X-axis crop factor (>=1.0, 1.0 = no crop)
+     * @param cropZoomY Y-axis crop factor (>=1.0, 1.0 = no crop)
+     */
+    fun setCropZoom(cropZoomX: Float, cropZoomY: Float) {
+        val values = floatArrayOf(cropZoomX, cropZoomY)
+        mRenderHandler?.obtainMessage(MSG_GL_SET_CROP_ZOOM, values)?.sendToTarget()
     }
 
     /**
@@ -668,6 +724,8 @@ class RenderManager(
         private const val MSG_GL_SAVE_IMAGE = 0x08
         private const val MSG_GL_ROUTE_ANGLE = 0x09
         private const val MSG_GL_SET_ADJUSTMENTS = 0x0A
+        private const val MSG_GL_SET_ZOOM_PAN = 0x0B
+        private const val MSG_GL_SET_CROP_ZOOM = 0x0C
 
         // codec
         private const val MSG_GL_RENDER_CODEC_INIT = 0x11

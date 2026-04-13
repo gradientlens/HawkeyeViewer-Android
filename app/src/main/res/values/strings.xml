@@ -7,6 +7,8 @@
     <string name="btn_video">VIDEO</string>
     <string name="btn_adjust">ADJUST</string>
     <string name="btn_gallery">GALLERY</string>
+    <string name="btn_zoom">ZOOM</string>
+    <string name="btn_drag">DRAG</string>
 
     <!-- Gallery -->
     <string name="gallery_title">Captured Media</string>
@@ -16,6 +18,12 @@
     <string name="gallery_delete_failed">Delete failed</string>
     <string name="gallery_saving_to_usb">Saving to USB storage</string>
     <string name="gallery_saving_to_internal">Saving to internal storage</string>
+    <string name="gallery_select">Select</string>
+    <string name="gallery_cancel">Cancel</string>
+    <string name="gallery_select_all">All</string>
+    <string name="gallery_delete_selected">Delete</string>
+    <string name="gallery_move_to_usb">Move to USB</string>
+    <string name="gallery_selected_count">%d selected</string>
 
     <!-- Camera Controls -->
     <string name="btn_start">Start</string>
@@ -27,7 +35,7 @@
     <string name="btn_defaults">Defaults</string>
 
     <!-- Section Headers -->
-    <string name="section_camera">ASPECT RATIO</string>
+    <string name="section_camera">CAMERA</string>
     <string name="section_image">IMAGE</string>
     <string name="section_transform">TRANSFORM</string>
 

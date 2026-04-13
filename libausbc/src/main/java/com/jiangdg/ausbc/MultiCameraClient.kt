@@ -548,6 +548,14 @@ class MultiCameraClient(ctx: Context, callback: IDeviceConnectCallBack?) {
             mRenderManager?.setImageAdjustments(brightness, contrast, saturation, hue, gamma, sharpness)
         }
 
+        fun setZoomPan(zoom: Float, panX: Float, panY: Float) {
+            mRenderManager?.setZoomPan(zoom, panX, panY)
+        }
+
+        fun setCropZoom(cropZoomX: Float, cropZoomY: Float) {
+            mRenderManager?.setCropZoom(cropZoomX, cropZoomY)
+        }
+
         /**
          * Set render size
          *
@@ -840,7 +848,7 @@ class MultiCameraClient(ctx: Context, callback: IDeviceConnectCallBack?) {
                 size ?: return@also
                 return size
             }
-            // find the closest aspectRatio
+            // find the closest width to requested
             var minDistance: Int = maxWidth
             var closetSize = sizeList[0]
             sizeList.forEach { size ->
@@ -848,13 +856,6 @@ class MultiCameraClient(ctx: Context, callback: IDeviceConnectCallBack?) {
                     minDistance = abs(maxWidth - size.width)
                     closetSize = size
                 }
-            }
-            // use default
-            sizeList.find {
-                (it.width == DEFAULT_PREVIEW_WIDTH || it.height == DEFAULT_PREVIEW_HEIGHT)
-            }.also { size ->
-                size ?: return@also
-                return size
             }
             return closetSize
         }

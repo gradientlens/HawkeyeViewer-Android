@@ -33,6 +33,13 @@ import com.jiangdg.ausbc.camera.bean.CameraRequest
 import com.jiangdg.ausbc.render.env.RotateType
 import com.jiangdg.ausbc.widget.AspectRatioTextureView
 import com.jiangdg.ausbc.widget.IAspectRatio
+import android.view.GestureDetector
+import android.view.MotionEvent
+import android.view.ScaleGestureDetector
+import android.widget.AdapterView
+import android.widget.ArrayAdapter
+import androidx.constraintlayout.widget.ConstraintLayout
+import androidx.constraintlayout.widget.ConstraintSet
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.FileOutputStream
@@ -61,6 +68,20 @@ class MainActivity : CameraActivity() {
     @Volatile private var latestPreviewTimestampMs = 0L
     @Volatile private var hasLoggedPreviewFrame = false
 
+    // Zoom/pan state
+    private var currentZoom = 1.0f
+    private var currentPanX = 0.0f
+    private var currentPanY = 0.0f
+    private var scaleGestureDetector: ScaleGestureDetector? = null
+    private var gestureDetector: GestureDetector? = null
+    private var isPinching = false
+    private var lastTouchX = 0f
+    private var lastTouchY = 0f
+    private var activePointerId = MotionEvent.INVALID_POINTER_ID
+    private var isZoomModeActive = false
+    private var isDragModeActive = false
+    private val zoomOverlayHandler = android.os.Handler(android.os.Looper.getMainLooper())
+
     private val previewDataCallback = object : IPreviewDataCallBack {
         override fun onPreviewData(data: ByteArray?, width: Int, height: Int, format: IPreviewDataCallBack.DataFormat) {
             if (data == null) {
@@ -81,6 +102,12 @@ class MainActivity : CameraActivity() {
     companion object {
         private const val TAG = "HawkeyeCamera"
         private const val REQUEST_PERMISSION = 1
+        private const val ZOOM_MIN = 1.0f
+        private const val ZOOM_MAX = 5.0f
+        private const val DPAD_PAN_STEP = 0.05f
+        private const val DPAD_ZOOM_STEP = 0.25f
+        private const val MOUSE_SCROLL_ZOOM_FACTOR = 0.1f
+        private const val ZOOM_OVERLAY_FADE_MS = 1500L
         private const val HARDWARE_CAPTURE_INITIAL_DELAY_MS = 0L
         private const val HARDWARE_CAPTURE_RETRY_DELAY_MS = 150L
         private const val HARDWARE_CAPTURE_MAX_ATTEMPTS = 5
@@ -124,8 +151,8 @@ class MainActivity : CameraActivity() {
 
     override fun getCameraRequest(): CameraRequest {
         return CameraRequest.Builder()
-            .setPreviewWidth(720)
-            .setPreviewHeight(720)
+            .setPreviewWidth(3840)
+            .setPreviewHeight(3840)
             .setRenderMode(CameraRequest.RenderMode.OPENGL)
             .setDefaultRotateType(RotateType.ANGLE_0)
             .setAudioSource(
@@ -151,8 +178,40 @@ class MainActivity : CameraActivity() {
                 wasCameraOpen = true
                 showStatus("Camera ready")
 
+                // Show camera name
+                val deviceName = self.device?.productName ?: self.device?.deviceName ?: "USB Camera"
+                runOnUiThread {
+                    binding.cameraNameText.text = deviceName
+                    binding.cameraNameText.setTextColor(
+                        ContextCompat.getColor(this, R.color.text_primary))
+                }
+                writeLog("Camera name: $deviceName")
+
+                // Detect actual camera resolution and update aspect ratio labels
+                val actualW = self.getCameraRequest()?.previewWidth ?: cameraSourceW
+                val actualH = self.getCameraRequest()?.previewHeight ?: cameraSourceH
+                writeLog("Camera actual resolution: ${actualW}x${actualH}")
+                if (actualW > 0 && actualH > 0 && (actualW != cameraSourceW || actualH != cameraSourceH)) {
+                    cameraSourceW = actualW
+                    cameraSourceH = actualH
+                    runOnUiThread {
+                        updateAspectLabels()
+                        // Re-apply current aspect with correct crop for new resolution
+                        val pos = binding.viewModeSpinner.selectedItemPosition
+                        if (pos >= 0 && pos < aspectRatioTypes.size) {
+                            applyAspectType(aspectRatioTypes[pos])
+                        }
+                    }
+                }
+
                 // Re-apply shader adjustments from current slider values
                 pushShaderAdjustments()
+
+                // Re-apply crop zoom for current aspect ratio selection
+                setCropZoom(currentCropZoomX, currentCropZoomY)
+
+                // Re-apply zoom/pan (needed after returning from gallery or resume)
+                applyZoomPan()
 
                 // Re-apply mirror/flip transform (needed after resume)
                 updateTransform()
@@ -186,6 +245,11 @@ class MainActivity : CameraActivity() {
             ICameraStateCallBack.State.CLOSED -> {
                 writeLog("Camera CLOSED")
                 showStatus("Camera disconnected")
+                runOnUiThread {
+                    binding.cameraNameText.text = "No camera connected"
+                    binding.cameraNameText.setTextColor(
+                        ContextCompat.getColor(this, R.color.text_tertiary))
+                }
                 removePreviewDataCallBack(previewDataCallback)
                 clearLatestPreviewFrame()
                 hardwareCaptureInFlight = false
@@ -218,6 +282,10 @@ class MainActivity : CameraActivity() {
         writeLog("=== APP STARTING (libausbc 3.3.3) session=$sessionId ===")
 
         try {
+            // Default camera source dimensions (updated when camera opens)
+            cameraSourceW = 720
+            cameraSourceH = 720
+
             checkPermissions()
             setupUI()
             writeLog("UI setup complete, waiting for camera...")
@@ -233,9 +301,19 @@ class MainActivity : CameraActivity() {
         writeLog("onStop: cleaning up camera client")
         // Save adjustment settings before stopping (D-pad doesn't trigger onStopTrackingTouch)
         saveImageControls()
-        // Explicitly tear down the camera client BEFORE the surface listener
-        // fires onSurfaceTextureDestroyed. This ensures clean state for resume.
-        // Double-call from onSurfaceTextureDestroyed is safe (no-op when client is null).
+        // Stop recording first to reduce USB transfer load
+        if (isRecording) {
+            try { captureVideoStop() } catch (_: Exception) {}
+            isRecording = false
+        }
+        // Stop button helper before camera close to reduce USB contention
+        buttonHelper?.stop()
+        buttonHelper = null
+        removePreviewDataCallBack(previewDataCallback)
+        // Brief pause to let in-flight USB transfers drain before destroying
+        // the native UVC camera object — prevents pthread_mutex crash in libuvc
+        try { Thread.sleep(150) } catch (_: InterruptedException) {}
+        // Now safe to tear down
         unRegisterMultiCamera()
         super.onStop()
     }
@@ -300,6 +378,7 @@ class MainActivity : CameraActivity() {
         setupImageControls()
         setupTransformControls()
         setupCollapsibleSections()
+        setupZoomPan()
     }
 
     private fun setupHeaderButtons() {
@@ -348,7 +427,339 @@ class MainActivity : CameraActivity() {
         }
     }
 
+    // ========================
+    // Zoom / Pan
+    // ========================
+
+    private fun setupZoomPan() {
+        // Pinch-to-zoom for touchscreen devices
+        scaleGestureDetector = ScaleGestureDetector(this,
+            object : ScaleGestureDetector.SimpleOnScaleGestureListener() {
+                override fun onScaleBegin(detector: ScaleGestureDetector): Boolean {
+                    isPinching = true
+                    return true
+                }
+                override fun onScale(detector: ScaleGestureDetector): Boolean {
+                    currentZoom = (currentZoom * detector.scaleFactor).coerceIn(ZOOM_MIN, ZOOM_MAX)
+                    clampPan()
+                    applyZoomPan()
+                    return true
+                }
+                override fun onScaleEnd(detector: ScaleGestureDetector) {
+                    isPinching = false
+                }
+            })
+
+        // Double-tap to reset (touchscreen + USB mouse)
+        gestureDetector = GestureDetector(this,
+            object : GestureDetector.SimpleOnGestureListener() {
+                override fun onDoubleTap(e: MotionEvent): Boolean {
+                    resetZoomPan()
+                    return true
+                }
+            })
+
+        // Touch/mouse handling on camera container
+        binding.cameraContainer.setOnTouchListener { _, event ->
+            scaleGestureDetector?.onTouchEvent(event)
+            gestureDetector?.onTouchEvent(event)
+
+            when (event.actionMasked) {
+                MotionEvent.ACTION_DOWN -> {
+                    activePointerId = event.getPointerId(0)
+                    lastTouchX = event.x
+                    lastTouchY = event.y
+                }
+                MotionEvent.ACTION_MOVE -> {
+                    if (!isPinching && currentZoom > 1.001f) {
+                        val pointerIndex = event.findPointerIndex(activePointerId)
+                        if (pointerIndex >= 0) {
+                            val x = event.getX(pointerIndex)
+                            val y = event.getY(pointerIndex)
+                            val dx = x - lastTouchX
+                            val dy = y - lastTouchY
+
+                            val viewW = binding.cameraContainer.width.toFloat()
+                            val viewH = binding.cameraContainer.height.toFloat()
+                            if (viewW > 0 && viewH > 0) {
+                                // Invert drag direction when image is mirrored/flipped
+                                val mirrorSign = if (binding.mirrorCheckBox.isChecked) -1f else 1f
+                                val flipSign = if (binding.flipCheckBox.isChecked) -1f else 1f
+                                currentPanX -= mirrorSign * dx / (viewW * currentZoom)
+                                currentPanY -= flipSign * dy / (viewH * currentZoom)
+                                clampPan()
+                                applyZoomPan()
+                            }
+
+                            lastTouchX = x
+                            lastTouchY = y
+                        }
+                    }
+                }
+                MotionEvent.ACTION_POINTER_DOWN -> {
+                    val newIndex = event.actionIndex
+                    lastTouchX = event.getX(newIndex)
+                    lastTouchY = event.getY(newIndex)
+                    activePointerId = event.getPointerId(newIndex)
+                }
+                MotionEvent.ACTION_POINTER_UP -> {
+                    val upIndex = event.actionIndex
+                    val upId = event.getPointerId(upIndex)
+                    if (upId == activePointerId) {
+                        val newIndex = if (upIndex == 0) 1 else 0
+                        if (newIndex < event.pointerCount) {
+                            lastTouchX = event.getX(newIndex)
+                            lastTouchY = event.getY(newIndex)
+                            activePointerId = event.getPointerId(newIndex)
+                        }
+                    }
+                }
+                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                    activePointerId = MotionEvent.INVALID_POINTER_ID
+                }
+            }
+            true
+        }
+
+        // USB mouse scroll wheel zoom on camera container
+        binding.cameraContainer.setOnGenericMotionListener { _, event ->
+            if (event.action == MotionEvent.ACTION_SCROLL) {
+                val scrollY = event.getAxisValue(MotionEvent.AXIS_VSCROLL)
+                if (scrollY != 0f) {
+                    currentZoom = (currentZoom + scrollY * MOUSE_SCROLL_ZOOM_FACTOR)
+                        .coerceIn(ZOOM_MIN, ZOOM_MAX)
+                    clampPan()
+                    applyZoomPan()
+                    return@setOnGenericMotionListener true
+                }
+            }
+            false
+        }
+
+        // Zoom toolbar button — click to toggle zoom mode, long-press to reset
+        binding.zoomButton.setOnClickListener {
+            if (isDragModeActive) exitDragMode()
+            isZoomModeActive = !isZoomModeActive
+            updateZoomDragButtonStates()
+        }
+        binding.zoomButton.setOnLongClickListener {
+            resetZoomPan()
+            true
+        }
+
+        // Drag toolbar button — click to toggle drag mode, long-press to recenter
+        binding.dragButton.setOnClickListener {
+            if (currentZoom <= 1.001f) return@setOnClickListener // nothing to drag
+            if (isZoomModeActive) exitZoomMode()
+            isDragModeActive = !isDragModeActive
+            updateZoomDragButtonStates()
+        }
+        binding.dragButton.setOnLongClickListener {
+            // Recenter pan
+            currentPanX = 0f
+            currentPanY = 0f
+            applyZoomPan()
+            true
+        }
+
+        updateZoomDragButtonStates()
+    }
+
+    private fun exitZoomMode() {
+        isZoomModeActive = false
+        updateZoomDragButtonStates()
+    }
+
+    private fun exitDragMode() {
+        isDragModeActive = false
+        updateZoomDragButtonStates()
+    }
+
+    private fun resetZoomPan() {
+        currentZoom = 1.0f
+        currentPanX = 0.0f
+        currentPanY = 0.0f
+        if (isZoomModeActive) exitZoomMode()
+        if (isDragModeActive) exitDragMode()
+        applyZoomPan()
+    }
+
+    private fun updateZoomDragButtonStates() {
+        val activeColor = ContextCompat.getColor(this, R.color.hawkeye_primary)
+        val inactiveColor = ContextCompat.getColor(this, R.color.text_secondary)
+
+        // Zoom button
+        binding.zoomIcon.setColorFilter(if (isZoomModeActive) activeColor else inactiveColor)
+        binding.zoomLabel.setTextColor(if (isZoomModeActive) activeColor else inactiveColor)
+
+        // Drag button — dimmed when zoom is 1x
+        val dragAvailable = currentZoom > 1.001f
+        val dragColor = when {
+            isDragModeActive -> activeColor
+            dragAvailable -> inactiveColor
+            else -> ContextCompat.getColor(this, R.color.text_disabled)
+        }
+        binding.dragIcon.setColorFilter(dragColor)
+        binding.dragLabel.setTextColor(dragColor)
+        binding.dragButton.alpha = if (dragAvailable) 1.0f else 0.4f
+    }
+
+    private fun clampPan() {
+        // Total zoom per axis = cropZoom * userZoom
+        val totalZoomX = currentCropZoomX * currentZoom
+        val totalZoomY = currentCropZoomY * currentZoom
+        if (totalZoomX <= 1.001f && totalZoomY <= 1.001f) {
+            currentPanX = 0f
+            currentPanY = 0f
+            return
+        }
+        val maxPanX = if (totalZoomX > 1f) (totalZoomX - 1f) / (2f * totalZoomX) else 0f
+        val maxPanY = if (totalZoomY > 1f) (totalZoomY - 1f) / (2f * totalZoomY) else 0f
+        currentPanX = currentPanX.coerceIn(-maxPanX, maxPanX)
+        currentPanY = currentPanY.coerceIn(-maxPanY, maxPanY)
+    }
+
+    private fun applyZoomPan() {
+        setZoomPan(currentZoom, currentPanX, currentPanY)
+        showZoomOverlay()
+        updateZoomDragButtonStates()
+    }
+
+    private fun showZoomOverlay() {
+        if (currentZoom > 1.001f) {
+            binding.zoomOverlay.text = String.format("%.1fx", currentZoom)
+            binding.zoomOverlay.visibility = View.VISIBLE
+            zoomOverlayHandler.removeCallbacksAndMessages(null)
+            zoomOverlayHandler.postDelayed({
+                binding.zoomOverlay.visibility = View.GONE
+            }, ZOOM_OVERLAY_FADE_MS)
+        } else {
+            binding.zoomOverlay.visibility = View.GONE
+            zoomOverlayHandler.removeCallbacksAndMessages(null)
+        }
+    }
+
+    override fun dispatchKeyEvent(event: android.view.KeyEvent): Boolean {
+        if (event.action == android.view.KeyEvent.ACTION_DOWN) {
+            // Back button exits active zoom/drag mode before closing panels
+            if (event.keyCode == android.view.KeyEvent.KEYCODE_BACK) {
+                if (isDragModeActive) { exitDragMode(); return true }
+                if (isZoomModeActive) { exitZoomMode(); return true }
+            }
+
+            // D-pad handling for zoom and drag modes
+            if (isZoomModeActive && !isSettingsPanelOpen) {
+                when (event.keyCode) {
+                    android.view.KeyEvent.KEYCODE_DPAD_UP,
+                    android.view.KeyEvent.KEYCODE_DPAD_RIGHT -> {
+                        currentZoom = (currentZoom + DPAD_ZOOM_STEP).coerceIn(ZOOM_MIN, ZOOM_MAX)
+                        clampPan(); applyZoomPan(); return true
+                    }
+                    android.view.KeyEvent.KEYCODE_DPAD_DOWN,
+                    android.view.KeyEvent.KEYCODE_DPAD_LEFT -> {
+                        currentZoom = (currentZoom - DPAD_ZOOM_STEP).coerceIn(ZOOM_MIN, ZOOM_MAX)
+                        clampPan(); applyZoomPan(); return true
+                    }
+                }
+            }
+
+            if (isDragModeActive && !isSettingsPanelOpen) {
+                when (event.keyCode) {
+                    android.view.KeyEvent.KEYCODE_DPAD_LEFT -> {
+                        currentPanX -= DPAD_PAN_STEP
+                        clampPan(); applyZoomPan(); return true
+                    }
+                    android.view.KeyEvent.KEYCODE_DPAD_RIGHT -> {
+                        currentPanX += DPAD_PAN_STEP
+                        clampPan(); applyZoomPan(); return true
+                    }
+                    android.view.KeyEvent.KEYCODE_DPAD_UP -> {
+                        currentPanY -= DPAD_PAN_STEP
+                        clampPan(); applyZoomPan(); return true
+                    }
+                    android.view.KeyEvent.KEYCODE_DPAD_DOWN -> {
+                        currentPanY += DPAD_PAN_STEP
+                        clampPan(); applyZoomPan(); return true
+                    }
+                }
+            }
+        }
+        return super.dispatchKeyEvent(event)
+    }
+
+    // Aspect ratio view options — labels and crop zoom computed from camera resolution
+    data class AspectRatioType(val name: String, val ratio: String, val aspectW: Float, val aspectH: Float)
+    private val aspectRatioTypes = listOf(
+        AspectRatioType("1:1", "1:1", 1f, 1f),
+        AspectRatioType("4:3", "4:3", 4f, 3f),
+        AspectRatioType("Wide", "16:9", 16f, 9f)
+    )
+    private var cameraSourceW = 720  // updated when camera opens
+    private var cameraSourceH = 720
+    private var currentCropZoomX = 1.0f
+    private var currentCropZoomY = 1.0f
+
+    private fun buildAspectLabel(type: AspectRatioType): String {
+        val cameraAspect = cameraSourceW.toFloat() / cameraSourceH.toFloat()
+        val viewAspect = type.aspectW / type.aspectH
+        val displayW: Int
+        val displayH: Int
+        if (viewAspect >= cameraAspect) {
+            displayW = cameraSourceW
+            displayH = (cameraSourceW / viewAspect).toInt()
+        } else {
+            displayH = cameraSourceH
+            displayW = (cameraSourceH * viewAspect).toInt()
+        }
+        return "${type.name} — ${displayW}×${displayH}"
+    }
+
+    private fun calcCropZoom(type: AspectRatioType): Pair<Float, Float> {
+        val cameraAspect = cameraSourceW.toFloat() / cameraSourceH.toFloat()
+        val viewAspect = type.aspectW / type.aspectH
+        return if (viewAspect >= cameraAspect) {
+            1.0f to (viewAspect / cameraAspect)
+        } else {
+            (cameraAspect / viewAspect) to 1.0f
+        }
+    }
+
+    private fun updateAspectLabels() {
+        val adapter = binding.viewModeSpinner.adapter as? ArrayAdapter<String> ?: return
+        adapter.clear()
+        adapter.addAll(aspectRatioTypes.map { buildAspectLabel(it) })
+        adapter.notifyDataSetChanged()
+    }
+
     private fun setupCameraControls() {
+        // Aspect ratio spinner — matching Windows HawkeyeViewerPlus style
+        val adapter = ArrayAdapter(
+            this,
+            R.layout.spinner_item,
+            aspectRatioTypes.map { buildAspectLabel(it) }.toMutableList()
+        )
+        adapter.setDropDownViewResource(R.layout.spinner_dropdown_item)
+        binding.viewModeSpinner.adapter = adapter
+
+        // Restore saved selection
+        val savedRatio = getSharedPreferences("image_adjustments", MODE_PRIVATE)
+            .getString("aspect_ratio", "1:1") ?: "1:1"
+        val savedIndex = aspectRatioTypes.indexOfFirst { it.ratio == savedRatio }
+        if (savedIndex >= 0) binding.viewModeSpinner.setSelection(savedIndex)
+        // Apply saved ratio immediately
+        applyAspectType(aspectRatioTypes[if (savedIndex >= 0) savedIndex else 0])
+
+        binding.viewModeSpinner.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
+            override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
+                val type = aspectRatioTypes[position]
+                applyAspectType(type)
+                getSharedPreferences("image_adjustments", MODE_PRIVATE)
+                    .edit().putString("aspect_ratio", type.ratio).apply()
+                writeLog("Aspect ratio changed to: ${buildAspectLabel(type)}")
+            }
+            override fun onNothingSelected(parent: AdapterView<*>?) {}
+        }
+
         // Start camera button - request permission to trigger camera open
         binding.startButton.setOnClickListener {
             writeLog("Start button pressed, requesting device list...")
@@ -379,6 +790,26 @@ class MainActivity : CameraActivity() {
                 writeLog("Error stopping camera: ${e.message}")
             }
         }
+    }
+
+    private fun applyAspectType(type: AspectRatioType) {
+        // Change view shape
+        val constraintLayout = binding.root as ConstraintLayout
+        val constraintSet = ConstraintSet()
+        constraintSet.clone(constraintLayout)
+        constraintSet.setDimensionRatio(R.id.cameraContainer, type.ratio)
+        constraintSet.applyTo(constraintLayout)
+
+        // Calculate and apply crop zoom from actual camera resolution
+        val (cropX, cropY) = calcCropZoom(type)
+        currentCropZoomX = cropX
+        currentCropZoomY = cropY
+        setCropZoom(currentCropZoomX, currentCropZoomY)
+
+        // Reset pan when aspect changes (pan limits change)
+        currentPanX = 0f
+        currentPanY = 0f
+        applyZoomPan()
     }
 
     // =====================
@@ -900,7 +1331,7 @@ private fun triggerHardwareCapture(fromHardwareButton: Boolean) {
     }
 
     private fun capturePreviewBitmap(announceStart: Boolean = true): Boolean {
-        var bitmap = mTextureView?.bitmap
+        val bitmap = mTextureView?.bitmap
         if (bitmap == null) {
             writeLog("capturePreviewBitmap: texture view bitmap unavailable")
             return false
@@ -918,19 +1349,8 @@ private fun triggerHardwareCapture(fromHardwareButton: Boolean) {
                 flashCaptureIcon()
             }
 
-            // TextureView bitmap already has GL shader adjustments (WYSIWYG)
-            // but GL transform (mirror/flip) may not be reflected, so apply in software
-            val mirror = binding.mirrorCheckBox.isChecked
-            val flip = binding.flipCheckBox.isChecked
-            if (mirror || flip) {
-                val w = bitmap.width
-                val h = bitmap.height
-                val matrix = android.graphics.Matrix()
-                matrix.setScale(if (mirror) -1f else 1f, if (flip) -1f else 1f, w / 2f, h / 2f)
-                val transformed = Bitmap.createBitmap(bitmap, 0, 0, w, h, matrix, true)
-                bitmap.recycle()
-                bitmap = transformed
-            }
+            // TextureView bitmap already has GL shader adjustments AND transforms
+            // (mirror/flip/rotation) baked in — true WYSIWYG, no further processing needed
 
             FileOutputStream(imagePath).use { output ->
                 if (!bitmap.compress(Bitmap.CompressFormat.JPEG, 100, output)) {
@@ -1093,6 +1513,14 @@ private fun showStillCapturedFeedback() {
             return
         }
 
+        // Prefer TextureView bitmap — already has GL shader adjustments baked in (WYSIWYG)
+        if (capturePreviewBitmap(announceStart = true)) {
+            writeLog("doCapture: used TextureView bitmap (WYSIWYG)")
+            return
+        }
+
+        // Fallback to raw camera capture path
+        writeLog("doCapture: TextureView bitmap unavailable, falling back to raw capture")
         try {
             val captureDir = getAppPicturesDir()
             val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())

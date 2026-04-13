@@ -79,13 +79,29 @@
             android:textSize="13sp"
             android:layout_marginStart="12dp"
             tools:text="12 items" />
+
+        <!-- Select button -->
+        <TextView
+            android:id="@+id/selectButton"
+            android:layout_width="wrap_content"
+            android:layout_height="36dp"
+            android:gravity="center"
+            android:text="@string/gallery_select"
+            android:textColor="@color/text_primary"
+            android:textSize="14sp"
+            android:paddingHorizontal="16dp"
+            android:layout_marginStart="12dp"
+            android:background="@drawable/bg_icon_button"
+            android:clickable="true"
+            android:focusable="true" />
     </LinearLayout>
 
     <!-- Empty state -->
     <TextView
         android:id="@+id/emptyText"
         android:layout_width="match_parent"
-        android:layout_height="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
         android:gravity="center"
         android:text="@string/gallery_empty"
         android:textColor="@color/text_secondary"
@@ -100,5 +116,89 @@
         android:layout_weight="1"
         android:padding="4dp"
         android:clipToPadding="false" />
+
+    <!-- Action bar (visible in select mode only) -->
+    <LinearLayout
+        android:id="@+id/actionBar"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:paddingHorizontal="16dp"
+        android:paddingVertical="10dp"
+        android:gravity="center_vertical"
+        android:background="@color/surface_dark"
+        android:elevation="8dp"
+        android:visibility="gone">
+
+        <!-- Selection count -->
+        <TextView
+            android:id="@+id/selectionCount"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:textColor="@color/text_primary"
+            android:textSize="14sp"
+            tools:text="3 selected" />
+
+        <!-- Select All -->
+        <TextView
+            android:id="@+id/selectAllButton"
+            android:layout_width="wrap_content"
+            android:layout_height="36dp"
+            android:gravity="center"
+            android:text="@string/gallery_select_all"
+            android:textColor="@color/text_primary"
+            android:textSize="13sp"
+            android:paddingHorizontal="14dp"
+            android:layout_marginEnd="8dp"
+            android:background="@drawable/bg_icon_button"
+            android:clickable="true"
+            android:focusable="true" />
+
+        <!-- Move to USB -->
+        <TextView
+            android:id="@+id/moveToUsbButton"
+            android:layout_width="wrap_content"
+            android:layout_height="36dp"
+            android:gravity="center"
+            android:text="@string/gallery_move_to_usb"
+            android:textColor="@color/text_primary"
+            android:textSize="13sp"
+            android:paddingHorizontal="14dp"
+            android:layout_marginEnd="8dp"
+            android:background="@drawable/bg_icon_button"
+            android:clickable="true"
+            android:focusable="true"
+            android:visibility="gone" />
+
+        <!-- Delete Selected -->
+        <TextView
+            android:id="@+id/deleteSelectedButton"
+            android:layout_width="wrap_content"
+            android:layout_height="36dp"
+            android:gravity="center"
+            android:text="@string/gallery_delete_selected"
+            android:textColor="#e74c3c"
+            android:textSize="13sp"
+            android:paddingHorizontal="14dp"
+            android:layout_marginEnd="8dp"
+            android:background="@drawable/bg_icon_button"
+            android:clickable="true"
+            android:focusable="true" />
+
+        <!-- Cancel -->
+        <TextView
+            android:id="@+id/cancelSelectButton"
+            android:layout_width="wrap_content"
+            android:layout_height="36dp"
+            android:gravity="center"
+            android:text="@string/gallery_cancel"
+            android:textColor="@color/text_secondary"
+            android:textSize="13sp"
+            android:paddingHorizontal="14dp"
+            android:background="@drawable/bg_icon_button"
+            android:clickable="true"
+            android:focusable="true" />
+    </LinearLayout>
 
 </LinearLayout>
