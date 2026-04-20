@@ -3,6 +3,7 @@ package com.hawkeyeborescopes.viewer
 import android.Manifest
 import android.content.ContentValues
 import android.content.Intent
+import android.view.WindowManager
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
@@ -40,6 +41,7 @@ import android.widget.AdapterView
 import android.widget.ArrayAdapter
 import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.constraintlayout.widget.ConstraintSet
+import android.content.res.Configuration
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.FileOutputStream
@@ -78,9 +80,24 @@ class MainActivity : CameraActivity() {
     private var lastTouchX = 0f
     private var lastTouchY = 0f
     private var activePointerId = MotionEvent.INVALID_POINTER_ID
+    private var isStartingCamera = false
+    private var isCameraActive = false
+    private var lastStopTimeMs = 0L
+    private val startRetryRunnable = Runnable { doStartCamera() }
     private var isZoomModeActive = false
     private var isDragModeActive = false
     private val zoomOverlayHandler = android.os.Handler(android.os.Looper.getMainLooper())
+
+    // Phone layout detection
+    private val isPhone: Boolean by lazy {
+        resources.configuration.smallestScreenWidthDp < 600
+    }
+
+    // Phone adjust strip state
+    private var isAdjustStripOpen = false
+    private enum class StripSection { CAMERA, IMAGE, TRANSFORM }
+    private var currentStripSection = StripSection.IMAGE
+    private var currentImageControlIndex = 0
 
     private val previewDataCallback = object : IPreviewDataCallBack {
         override fun onPreviewData(data: ByteArray?, width: Int, height: Int, format: IPreviewDataCallBack.DataFormat) {
@@ -175,6 +192,8 @@ class MainActivity : CameraActivity() {
         when (code) {
             ICameraStateCallBack.State.OPENED -> {
                 writeLog("Camera OPENED")
+                isStartingCamera = false
+                isCameraActive = true
                 wasCameraOpen = true
                 showStatus("Camera ready")
 
@@ -244,7 +263,14 @@ class MainActivity : CameraActivity() {
             }
             ICameraStateCallBack.State.CLOSED -> {
                 writeLog("Camera CLOSED")
-                showStatus("Camera disconnected")
+                isCameraActive = false
+                if (isStartingCamera) {
+                    // CLOSED during start attempt — the delay-based start will handle retry
+                    writeLog("Camera closed during start attempt — delay will handle it")
+                    isStartingCamera = false
+                } else {
+                    showStatus("Camera disconnected")
+                }
                 runOnUiThread {
                     binding.cameraNameText.text = "No camera connected"
                     binding.cameraNameText.setTextColor(
@@ -260,6 +286,16 @@ class MainActivity : CameraActivity() {
             }
             ICameraStateCallBack.State.ERROR -> {
                 writeLog("Camera ERROR: $msg")
+                // First requestPermission() after closeCamera() always fails with -99.
+                // Auto-retry once — the second attempt succeeds.
+                if (isStartingCamera && msg?.contains("result=-99") == true) {
+                    writeLog("Got -99 during start — auto-retrying in 500ms")
+                    binding.cameraContainer.removeCallbacks(startRetryRunnable)
+                    binding.cameraContainer.postDelayed(startRetryRunnable, 500)
+                    // Keep isStartingCamera true so CLOSED callback stays quiet
+                    return
+                }
+                isStartingCamera = false
                 showStatus("Camera error: $msg")
                 removePreviewDataCallBack(previewDataCallback)
                 clearLatestPreviewFrame()
@@ -278,6 +314,8 @@ class MainActivity : CameraActivity() {
 
     override fun initView() {
         super.initView()
+        // Keep screen on while app is active — prevents sleep from killing camera
+        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         val sessionId = SimpleDateFormat("HHmmss", Locale.US).format(Date())
         writeLog("=== APP STARTING (libausbc 3.3.3) session=$sessionId ===")
 
@@ -320,17 +358,31 @@ class MainActivity : CameraActivity() {
 
     @Suppress("DEPRECATION")
     override fun onBackPressed() {
-        // Close the adjust panel instead of exiting the app
+        // Close the adjust strip (phone) or panel (tablet) instead of exiting the app
+        if (isPhone && isAdjustStripOpen) {
+            toggleAdjustStrip()
+            return
+        }
         if (isSettingsPanelOpen) {
             isSettingsPanelOpen = false
             binding.controlsPanel.visibility = View.GONE
             binding.settingsIcon.setColorFilter(
                 ContextCompat.getColor(this, R.color.text_secondary))
-            // Move focus to the adjust button so the user is back where they started
             binding.settingsButton.requestFocus()
             return
         }
         super.onBackPressed()
+    }
+
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        super.onConfigurationChanged(newConfig)
+        if (isPhone) {
+            // Re-apply aspect ratio constraints after orientation change
+            val pos = binding.viewModeSpinner.selectedItemPosition
+            if (pos >= 0 && pos < aspectRatioTypes.size) {
+                applyAspectType(aspectRatioTypes[pos])
+            }
+        }
     }
 
     override fun onStart() {
@@ -373,12 +425,17 @@ class MainActivity : CameraActivity() {
         // Header button click listeners
         setupHeaderButtons()
 
-        // Settings panel controls
+        // Settings panel controls (data layer — used on both phone and tablet)
         setupCameraControls()
         setupImageControls()
         setupTransformControls()
         setupCollapsibleSections()
         setupZoomPan()
+
+        // Phone: set up the compact adjust strip
+        if (isPhone) {
+            setupPhoneAdjustStrip()
+        }
     }
 
     private fun setupHeaderButtons() {
@@ -410,20 +467,25 @@ class MainActivity : CameraActivity() {
             startActivity(intent)
         }
 
-        // Settings/Adjust button - toggles panel
+        // Settings/Adjust button - toggles panel (tablet) or strip (phone)
         binding.settingsButton.setOnClickListener {
-            isSettingsPanelOpen = !isSettingsPanelOpen
-            binding.controlsPanel.visibility = if (isSettingsPanelOpen) View.VISIBLE else View.GONE
+            if (isPhone) {
+                toggleAdjustStrip()
+            } else {
+                isSettingsPanelOpen = !isSettingsPanelOpen
+                binding.controlsPanel.visibility = if (isSettingsPanelOpen) View.VISIBLE else View.GONE
+            }
 
             // Update icon color to show active state
-            val color = if (isSettingsPanelOpen) {
+            val open = if (isPhone) isAdjustStripOpen else isSettingsPanelOpen
+            val color = if (open) {
                 ContextCompat.getColor(this, R.color.hawkeye_primary)
             } else {
                 ContextCompat.getColor(this, R.color.text_secondary)
             }
             binding.settingsIcon.setColorFilter(color)
 
-            writeLog("Settings panel visibility changed to: $isSettingsPanelOpen")
+            writeLog("Settings panel visibility changed to: $open")
         }
     }
 
@@ -482,11 +544,17 @@ class MainActivity : CameraActivity() {
                             val viewW = binding.cameraContainer.width.toFloat()
                             val viewH = binding.cameraContainer.height.toFloat()
                             if (viewW > 0 && viewH > 0) {
-                                // Invert drag direction when image is mirrored/flipped
-                                val mirrorSign = if (binding.mirrorCheckBox.isChecked) -1f else 1f
-                                val flipSign = if (binding.flipCheckBox.isChecked) -1f else 1f
-                                currentPanX -= mirrorSign * dx / (viewW * currentZoom)
-                                currentPanY -= flipSign * dy / (viewH * currentZoom)
+                                if (isPhone) {
+                                    // Phone: drag always follows finger regardless of mirror/flip
+                                    currentPanX += dx / (viewW * currentZoom)
+                                    currentPanY -= dy / (viewH * currentZoom)
+                                } else {
+                                    // Tablet: invert drag when mirrored/flipped
+                                    val mirrorSign = if (binding.mirrorCheckBox.isChecked) -1f else 1f
+                                    val flipSign = if (binding.flipCheckBox.isChecked) -1f else 1f
+                                    currentPanX -= mirrorSign * dx / (viewW * currentZoom)
+                                    currentPanY -= flipSign * dy / (viewH * currentZoom)
+                                }
                                 clampPan()
                                 applyZoomPan()
                             }
@@ -762,33 +830,72 @@ class MainActivity : CameraActivity() {
 
         // Start camera button - request permission to trigger camera open
         binding.startButton.setOnClickListener {
-            writeLog("Start button pressed, requesting device list...")
-            val devices = getDeviceList()
-            if (devices.isNullOrEmpty()) {
-                showStatus("No USB camera found")
-                writeLog("No USB devices found")
-            } else {
-                writeLog("Found ${devices.size} USB devices, requesting permission for first...")
-                requestPermission(devices[0])
-                showStatus("Starting camera...")
-            }
+            startCameraIfNeeded()
         }
 
         // Stop camera button
         binding.stopButton.setOnClickListener {
-            try {
-                // Stop recording first if active
-                if (isRecording) {
-                    captureVideoStop()
-                    isRecording = false
-                    updateRecordingUI(false)
-                }
-                closeCamera()
-                wasCameraOpen = false
-                showStatus("Camera stopped")
-            } catch (e: Exception) {
-                writeLog("Error stopping camera: ${e.message}")
+            stopCameraIfRunning()
+        }
+    }
+
+    private fun startCameraIfNeeded() {
+        if (isCameraActive) {
+            showStatus("Camera already running")
+            writeLog("Start pressed but camera already open — ignoring")
+            return
+        }
+        // Native UVC stack needs time to release after closeCamera().
+        // If Start is pressed too soon after Stop, delay the actual open.
+        val elapsed = System.currentTimeMillis() - lastStopTimeMs
+        val minDelay = 800L
+        if (lastStopTimeMs > 0 && elapsed < minDelay) {
+            val wait = minDelay - elapsed
+            writeLog("Start pressed ${elapsed}ms after stop — delaying ${wait}ms for USB release")
+            showStatus("Starting camera...")
+            isStartingCamera = true
+            binding.cameraContainer.removeCallbacks(startRetryRunnable)
+            binding.cameraContainer.postDelayed(startRetryRunnable, wait)
+            return
+        }
+        doStartCamera()
+    }
+
+    private fun doStartCamera() {
+        if (isCameraActive) return  // guard against stale delayed callback
+        writeLog("Start button pressed, requesting device list...")
+        val devices = getDeviceList()
+        if (devices.isNullOrEmpty()) {
+            showStatus("No USB camera found")
+            writeLog("No USB devices found")
+            isStartingCamera = false
+        } else {
+            writeLog("Found ${devices.size} USB devices, requesting permission for first...")
+            isStartingCamera = true
+            requestPermission(devices[0])
+            showStatus("Starting camera...")
+        }
+    }
+
+    private fun stopCameraIfRunning() {
+        writeLog("Stop button pressed")
+        // Cancel any pending start retry and mark camera inactive immediately
+        // (don't wait for async CLOSED callback)
+        isStartingCamera = false
+        isCameraActive = false
+        lastStopTimeMs = System.currentTimeMillis()
+        binding.cameraContainer.removeCallbacks(startRetryRunnable)
+        try {
+            if (isRecording) {
+                captureVideoStop()
+                isRecording = false
+                updateRecordingUI(false)
             }
+            closeCamera()
+            wasCameraOpen = false
+            showStatus("Camera stopped")
+        } catch (e: Exception) {
+            writeLog("Error stopping camera: ${e.message}")
         }
     }
 
@@ -799,6 +906,9 @@ class MainActivity : CameraActivity() {
         constraintSet.clone(constraintLayout)
         constraintSet.setDimensionRatio(R.id.cameraContainer, type.ratio)
         constraintSet.applyTo(constraintLayout)
+
+        // Force immediate layout pass (needed on phone where container is sandwiched between bars)
+        binding.cameraContainer.requestLayout()
 
         // Calculate and apply crop zoom from actual camera resolution
         val (cropX, cropY) = calcCropZoom(type)
@@ -838,9 +948,9 @@ class MainActivity : CameraActivity() {
         setupShaderSeekBar(binding.gammaSeekBar, binding.gammaValue, "gamma", binding.gammaRow, binding.gammaLabel)
         setupShaderSeekBar(binding.sharpnessSeekBar, binding.sharpnessValue, "sharpness", binding.sharpnessRow, binding.sharpnessLabel)
 
-        // Defaults button
+        // Defaults button (with confirmation)
         binding.defaultsButton.setOnClickListener {
-            resetImageControlsToDefaults()
+            confirmResetDefaults()
         }
 
         // Restore last saved adjustments (or sync defaults to shader on first launch)
@@ -981,6 +1091,23 @@ class MainActivity : CameraActivity() {
         applyShaderAdjustment("hue", h)
         applyShaderAdjustment("gamma", g)
         applyShaderAdjustment("sharpness", sh)
+    }
+
+    private fun confirmResetDefaults() {
+        android.app.AlertDialog.Builder(this)
+            .setTitle("Reset to Defaults")
+            .setMessage("Reset all image adjustments and transforms to defaults?")
+            .setPositiveButton("Reset") { _, _ ->
+                resetImageControlsToDefaults()
+                // Sync strip display if on phone
+                if (isPhone) {
+                    if (currentStripSection == StripSection.IMAGE) updateStripImageControl()
+                    binding.stripMirrorCheckBox?.isChecked = false
+                    binding.stripFlipCheckBox?.isChecked = false
+                }
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
     }
 
     private fun resetImageControlsToDefaults() {
@@ -1678,6 +1805,217 @@ private fun showStillCapturedFeedback() {
             isRecording = false
             updateRecordingUI(false)
         }
+    }
+
+    // =====================
+    // Phone Adjust Strip
+    // =====================
+
+    /** Image control definitions — maps strip index to panel seekbar/value pairs */
+    private data class ImageControlDef(val name: String, val label: String)
+    private val imageControlDefs = listOf(
+        ImageControlDef("brightness", "Brightness"),
+        ImageControlDef("contrast", "Contrast"),
+        ImageControlDef("saturation", "Saturation"),
+        ImageControlDef("hue", "Hue"),
+        ImageControlDef("gamma", "Gamma"),
+        ImageControlDef("sharpness", "Sharpness")
+    )
+
+    private fun getImageSeekBar(index: Int): SeekBar = when (index) {
+        0 -> binding.brightnessSeekBar
+        1 -> binding.contrastSeekBar
+        2 -> binding.saturationSeekBar
+        3 -> binding.hueSeekBar
+        4 -> binding.gammaSeekBar
+        5 -> binding.sharpnessSeekBar
+        else -> binding.brightnessSeekBar
+    }
+
+    private fun getImageValueText(index: Int): android.widget.TextView = when (index) {
+        0 -> binding.brightnessValue
+        1 -> binding.contrastValue
+        2 -> binding.saturationValue
+        3 -> binding.hueValue
+        4 -> binding.gammaValue
+        5 -> binding.sharpnessValue
+        else -> binding.brightnessValue
+    }
+
+    private fun setupPhoneAdjustStrip() {
+        binding.adjustStrip ?: return
+        val tabCamera = binding.tabCamera ?: return
+        val tabImage = binding.tabImage ?: return
+        val tabTransform = binding.tabTransform ?: return
+        val prevBtn = binding.stripPrevButton ?: return
+        val nextBtn = binding.stripNextButton ?: return
+        val seekBar = binding.stripSeekBar ?: return
+        binding.stripControlLabel ?: return
+        val valueText = binding.stripValueText ?: return
+        val defaultsBtn = binding.stripDefaultsButton ?: return
+
+        // Section tab click handlers
+        tabCamera.setOnClickListener { switchStripSection(StripSection.CAMERA) }
+        tabImage.setOnClickListener { switchStripSection(StripSection.IMAGE) }
+        tabTransform.setOnClickListener { switchStripSection(StripSection.TRANSFORM) }
+
+        // Prev/next navigation (image controls)
+        prevBtn.setOnClickListener {
+            if (currentStripSection == StripSection.IMAGE) {
+                currentImageControlIndex = (currentImageControlIndex - 1 + imageControlDefs.size) % imageControlDefs.size
+                updateStripImageControl()
+            }
+        }
+        nextBtn.setOnClickListener {
+            if (currentStripSection == StripSection.IMAGE) {
+                currentImageControlIndex = (currentImageControlIndex + 1) % imageControlDefs.size
+                updateStripImageControl()
+            }
+        }
+
+        // Strip seekbar → updates shader directly + syncs panel seekbar
+        seekBar.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(sb: SeekBar?, progress: Int, fromUser: Boolean) {
+                if (fromUser && currentStripSection == StripSection.IMAGE) {
+                    valueText.text = progress.toString()
+                    val def = imageControlDefs[currentImageControlIndex]
+                    // Sync panel seekbar + value label (programmatic, so fromUser=false there)
+                    getImageSeekBar(currentImageControlIndex).progress = progress
+                    getImageValueText(currentImageControlIndex).text = progress.toString()
+                    // Apply directly since panel listener skips programmatic changes
+                    applyShaderAdjustment(def.name, progress)
+                }
+            }
+            override fun onStartTrackingTouch(sb: SeekBar?) {}
+            override fun onStopTrackingTouch(sb: SeekBar?) {
+                saveImageControls()
+            }
+        })
+
+        // Defaults button in strip (with confirmation)
+        defaultsBtn.setOnClickListener {
+            confirmResetDefaults()
+        }
+
+        // Wire strip camera controls
+        setupStripCameraControls()
+
+        // Wire strip transform controls
+        setupStripTransformControls()
+
+        // Initialize to IMAGE section
+        switchStripSection(StripSection.IMAGE)
+    }
+
+    private fun setupStripCameraControls() {
+        val stripSpinner = binding.stripViewSpinner ?: return
+        val stripStart = binding.stripStartButton ?: return
+        val stripStop = binding.stripStopButton ?: return
+
+        // Share the same adapter as the main spinner
+        stripSpinner.adapter = binding.viewModeSpinner.adapter
+
+        // Sync selection from main spinner
+        val savedRatio = getSharedPreferences("image_adjustments", MODE_PRIVATE)
+            .getString("aspect_ratio", "1:1") ?: "1:1"
+        val savedIndex = aspectRatioTypes.indexOfFirst { it.ratio == savedRatio }
+        if (savedIndex >= 0) stripSpinner.setSelection(savedIndex)
+
+        stripSpinner.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
+            override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
+                val type = aspectRatioTypes[position]
+                // Apply directly (don't rely on syncing to panel spinner)
+                applyAspectType(type)
+                getSharedPreferences("image_adjustments", MODE_PRIVATE)
+                    .edit().putString("aspect_ratio", type.ratio).apply()
+                // Keep panel spinner in sync for save/restore
+                binding.viewModeSpinner.setSelection(position, false)
+                writeLog("Strip: Aspect ratio changed to: ${buildAspectLabel(type)}")
+            }
+            override fun onNothingSelected(parent: AdapterView<*>?) {}
+        }
+
+        // Start/Stop camera — use shared methods
+        stripStart.setOnClickListener { startCameraIfNeeded() }
+        stripStop.setOnClickListener { stopCameraIfRunning() }
+    }
+
+    private fun setupStripTransformControls() {
+        val stripMirror = binding.stripMirrorCheckBox ?: return
+        val stripFlip = binding.stripFlipCheckBox ?: return
+
+        // Sync initial state
+        stripMirror.isChecked = binding.mirrorCheckBox.isChecked
+        stripFlip.isChecked = binding.flipCheckBox.isChecked
+
+        // Strip → panel sync
+        stripMirror.setOnCheckedChangeListener { _, isChecked ->
+            if (binding.mirrorCheckBox.isChecked != isChecked) {
+                binding.mirrorCheckBox.isChecked = isChecked
+            }
+        }
+        stripFlip.setOnCheckedChangeListener { _, isChecked ->
+            if (binding.flipCheckBox.isChecked != isChecked) {
+                binding.flipCheckBox.isChecked = isChecked
+            }
+        }
+    }
+
+    private fun toggleAdjustStrip() {
+        val strip = binding.adjustStrip ?: return
+        isAdjustStripOpen = !isAdjustStripOpen
+
+        if (isAdjustStripOpen) {
+            // Sync strip state before showing
+            if (currentStripSection == StripSection.IMAGE) updateStripImageControl()
+            strip.visibility = View.VISIBLE
+            strip.translationY = strip.height.toFloat()
+            strip.post {
+                strip.translationY = strip.height.toFloat()
+                strip.animate().translationY(0f).setDuration(200).start()
+            }
+        } else {
+            strip.animate().translationY(strip.height.toFloat())
+                .setDuration(200)
+                .withEndAction { strip.visibility = View.GONE }
+                .start()
+        }
+    }
+
+    private fun switchStripSection(section: StripSection) {
+        currentStripSection = section
+        val controlRow = binding.stripControlRow
+        val cameraContent = binding.stripCameraContent
+        val transformContent = binding.stripTransformContent
+        val activeColor = ContextCompat.getColor(this, R.color.hawkeye_primary)
+        val inactiveColor = ContextCompat.getColor(this, R.color.text_secondary)
+
+        // Update tab colors
+        binding.tabCamera?.setTextColor(if (section == StripSection.CAMERA) activeColor else inactiveColor)
+        binding.tabImage?.setTextColor(if (section == StripSection.IMAGE) activeColor else inactiveColor)
+        binding.tabTransform?.setTextColor(if (section == StripSection.TRANSFORM) activeColor else inactiveColor)
+
+        // Show/hide content rows
+        controlRow?.visibility = if (section == StripSection.IMAGE) View.VISIBLE else View.GONE
+        cameraContent?.visibility = if (section == StripSection.CAMERA) View.VISIBLE else View.GONE
+        transformContent?.visibility = if (section == StripSection.TRANSFORM) View.VISIBLE else View.GONE
+
+        if (section == StripSection.IMAGE) {
+            updateStripImageControl()
+        }
+    }
+
+    private fun updateStripImageControl() {
+        val seekBar = binding.stripSeekBar ?: return
+        val labelText = binding.stripControlLabel ?: return
+        val valueText = binding.stripValueText ?: return
+
+        val def = imageControlDefs[currentImageControlIndex]
+        val panelSeekBar = getImageSeekBar(currentImageControlIndex)
+
+        labelText.text = def.label
+        seekBar.progress = panelSeekBar.progress
+        valueText.text = panelSeekBar.progress.toString()
     }
 
     // =====================

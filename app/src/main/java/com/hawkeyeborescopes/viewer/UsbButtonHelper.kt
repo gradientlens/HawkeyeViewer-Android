@@ -150,6 +150,7 @@ class UsbButtonHelper(
         // Windows AmCap requires setting tilt to 0 before the button will register.
         // The default value is 3600 (0x0E10) which may be an "unarmed" state.
         armTiltForButtonDetection()
+        armRollForButtonDetection()
         startControlPolling()
         startDiagnosticPollWindow("camera-open")
         return true
@@ -1206,6 +1207,49 @@ class UsbButtonHelper(
             directPanTiltBaseline = armPayload.copyOf()
         } else {
             writeLog("$TAG: Tilt arm FAILED - value didn't change to 0 (still $verifyTilt)")
+        }
+    }
+
+    private fun armRollForButtonDetection() {
+        val target = directRollTarget
+        if (target == null) {
+            writeLog("$TAG: Cannot arm roll - no roll target found")
+            return
+        }
+        val interfaceNumber = synchronized(controlLock) { controlInterface?.id }
+            ?: synchronized(diagnosticLock) { diagnosticInterface?.id }
+            ?: probedInterfaceNumber
+        if (interfaceNumber == null) {
+            writeLog("$TAG: Cannot arm roll - no interface number")
+            return
+        }
+
+        // Read current value
+        val currentPayload = readAnySingleControl(target, interfaceNumber)
+        val currentRoll = currentPayload?.let(::decodeRollValue)
+        writeLog("$TAG: Roll arm: current roll=$currentRoll payload=[${currentPayload?.let(::payloadToHex) ?: "null"}]")
+
+        // Build payload with roll=0 (2 bytes, little-endian)
+        val armPayload = ByteArray(2) // [0x00, 0x00] = roll 0
+        val armCount = writeControlValue(target, interfaceNumber, armPayload)
+            .let { if (it > 0) it else tryWriteDirectControl(target, interfaceNumber, armPayload) }
+            .let { if (it > 0) it else writeViaCameraConnection(target, interfaceNumber, armPayload) }
+
+        writeLog("$TAG: Roll arm: SET_CUR to [${payloadToHex(armPayload)}] result=$armCount")
+
+        // Verify
+        try { Thread.sleep(50) } catch (_: InterruptedException) { return }
+        val verifyPayload = readAnySingleControl(target, interfaceNumber)
+        val verifyRoll = verifyPayload?.let(::decodeRollValue)
+        writeLog("$TAG: Roll arm: verify after SET_CUR roll=$verifyRoll payload=[${verifyPayload?.let(::payloadToHex) ?: "null"}]")
+
+        if (verifyRoll == 0) {
+            writeLog("$TAG: Roll ARMED to 0 - ready for button detection (expecting 0->non-zero on press)")
+            lastRollValue = 0
+            lastPolledRollValue = 0
+            directRollBaseline = armPayload.copyOf()
+        } else {
+            writeLog("$TAG: Roll arm FAILED - value didn't change to 0 (still $verifyRoll)")
         }
     }
 

@@ -1,5 +1,4 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Phone layout (default, < sw600dp). Tablet/TV layout is in layout-sw600dp/ -->
 <androidx.constraintlayout.widget.ConstraintLayout
     xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
@@ -9,64 +8,8 @@
     android:background="@color/background_dark"
     tools:context=".MainActivity">
 
-    <!-- Slim Top Bar - title + adjust button only on phone -->
-    <LinearLayout
-        android:id="@+id/topBar"
-        android:layout_width="0dp"
-        android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:paddingHorizontal="12dp"
-        android:paddingVertical="6dp"
-        android:gravity="center_vertical"
-        android:background="@color/surface_dark"
-        android:elevation="8dp"
-        app:layout_constraintTop_toTopOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toEndOf="parent">
-
-        <!-- App Title -->
-        <TextView
-            android:id="@+id/appTitle"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:text="@string/app_name"
-            android:textColor="@color/text_primary"
-            android:textSize="16sp"
-            android:textStyle="bold" />
-
-        <!-- Adjust/Settings Button - stays in top bar on phone -->
-        <LinearLayout
-            android:id="@+id/settingsButton"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:gravity="center"
-            android:padding="6dp"
-            android:background="@drawable/bg_icon_button"
-            android:clickable="true"
-            android:focusable="true">
-
-            <ImageView
-                android:id="@+id/settingsIcon"
-                android:layout_width="24dp"
-                android:layout_height="24dp"
-                android:src="@drawable/ic_tune"
-                app:tint="@color/text_secondary"
-                android:contentDescription="@string/btn_adjust" />
-
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="@string/btn_adjust"
-                android:textColor="@color/text_secondary"
-                android:textSize="11sp"
-                android:textAllCaps="true"
-                android:layout_marginStart="4dp" />
-        </LinearLayout>
-    </LinearLayout>
-
-    <!-- Camera Preview Container -->
+    <!-- Camera Preview Container - libausbc dynamically adds its TextureView here -->
+    <!-- dimensionRatio constrains to 4:3 matching the 640x480 camera output -->
     <FrameLayout
         android:id="@+id/cameraContainer"
         android:layout_width="0dp"
@@ -74,7 +17,7 @@
         android:background="#000000"
         app:layout_constraintDimensionRatio="1:1"
         app:layout_constraintTop_toBottomOf="@id/topBar"
-        app:layout_constraintBottom_toTopOf="@id/bottomBar"
+        app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent" />
 
@@ -96,424 +39,248 @@
         android:layout_marginStart="12dp"
         android:layout_marginBottom="12dp" />
 
-    <!-- Compact Adjust Strip - phone only, positioned above bottom bar -->
+    <!-- Top Header Bar -->
     <LinearLayout
-        android:id="@+id/adjustStrip"
-        android:layout_width="0dp"
-        android:layout_height="wrap_content"
-        android:orientation="vertical"
-        android:background="@color/surface_dark"
-        android:elevation="8dp"
-        android:visibility="gone"
-        app:layout_constraintBottom_toTopOf="@id/bottomBar"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toEndOf="parent">
-
-        <!-- Section tabs row -->
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:gravity="center"
-            android:paddingVertical="4dp"
-            android:paddingHorizontal="8dp">
-
-            <TextView
-                android:id="@+id/tabCamera"
-                android:layout_width="0dp"
-                android:layout_height="32dp"
-                android:layout_weight="1"
-                android:text="CAM"
-                android:textColor="@color/text_secondary"
-                android:textSize="12sp"
-                android:textStyle="bold"
-                android:gravity="center"
-                android:background="@drawable/bg_icon_button"
-                android:clickable="true"
-                android:focusable="true" />
-
-            <TextView
-                android:id="@+id/tabImage"
-                android:layout_width="0dp"
-                android:layout_height="32dp"
-                android:layout_weight="1"
-                android:layout_marginStart="4dp"
-                android:text="IMG"
-                android:textColor="@color/text_secondary"
-                android:textSize="12sp"
-                android:textStyle="bold"
-                android:gravity="center"
-                android:background="@drawable/bg_icon_button"
-                android:clickable="true"
-                android:focusable="true" />
-
-            <TextView
-                android:id="@+id/tabTransform"
-                android:layout_width="0dp"
-                android:layout_height="32dp"
-                android:layout_weight="1"
-                android:layout_marginStart="4dp"
-                android:text="XFM"
-                android:textColor="@color/text_secondary"
-                android:textSize="12sp"
-                android:textStyle="bold"
-                android:gravity="center"
-                android:background="@drawable/bg_icon_button"
-                android:clickable="true"
-                android:focusable="true" />
-
-            <!-- Defaults/Reset icon button -->
-            <ImageView
-                android:id="@+id/stripDefaultsButton"
-                android:layout_width="32dp"
-                android:layout_height="32dp"
-                android:layout_marginStart="8dp"
-                android:src="@drawable/ic_defaults"
-                app:tint="@color/text_secondary"
-                android:background="@drawable/bg_icon_button"
-                android:padding="4dp"
-                android:clickable="true"
-                android:focusable="true"
-                android:contentDescription="Reset to defaults" />
-        </LinearLayout>
-
-        <View
-            android:layout_width="match_parent"
-            android:layout_height="1dp"
-            android:background="@color/border_dark" />
-
-        <!-- Single control row with prev/next navigation -->
-        <LinearLayout
-            android:id="@+id/stripControlRow"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:gravity="center_vertical"
-            android:paddingHorizontal="4dp"
-            android:paddingVertical="6dp">
-
-            <!-- Prev arrow -->
-            <ImageView
-                android:id="@+id/stripPrevButton"
-                android:layout_width="28dp"
-                android:layout_height="28dp"
-                android:src="@drawable/ic_chevron_left"
-                app:tint="@color/text_secondary"
-                android:background="@drawable/bg_icon_button"
-                android:clickable="true"
-                android:focusable="true"
-                android:contentDescription="Previous control" />
-
-            <!-- Control label -->
-            <TextView
-                android:id="@+id/stripControlLabel"
-                android:layout_width="70dp"
-                android:layout_height="wrap_content"
-                android:textColor="@color/text_secondary"
-                android:textSize="11sp"
-                android:gravity="center"
-                tools:text="Brightness" />
-
-            <!-- SeekBar for current control -->
-            <SeekBar
-                android:id="@+id/stripSeekBar"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:max="100"
-                android:progress="50"
-                android:progressTint="@color/hawkeye_primary"
-                android:thumbTint="@color/hawkeye_primary" />
-
-            <!-- Value display -->
-            <TextView
-                android:id="@+id/stripValueText"
-                android:layout_width="30dp"
-                android:layout_height="wrap_content"
-                android:textColor="@color/text_value"
-                android:textSize="11sp"
-                android:gravity="end"
-                tools:text="50" />
-
-            <!-- Next arrow -->
-            <ImageView
-                android:id="@+id/stripNextButton"
-                android:layout_width="28dp"
-                android:layout_height="28dp"
-                android:src="@drawable/ic_chevron_right"
-                app:tint="@color/text_secondary"
-                android:background="@drawable/bg_icon_button"
-                android:clickable="true"
-                android:focusable="true"
-                android:contentDescription="Next control" />
-        </LinearLayout>
-
-        <!-- Camera section content (shown when CAM tab active) -->
-        <LinearLayout
-            android:id="@+id/stripCameraContent"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:gravity="center_vertical"
-            android:paddingHorizontal="8dp"
-            android:paddingVertical="6dp"
-            android:visibility="gone">
-
-            <Spinner
-                android:id="@+id/stripViewSpinner"
-                android:layout_width="0dp"
-                android:layout_height="40dp"
-                android:layout_weight="1"
-                android:gravity="center_vertical"
-                android:background="@drawable/bg_spinner"
-                android:popupBackground="@color/surface_dark" />
-
-            <Button
-                android:id="@+id/stripStartButton"
-                android:layout_width="wrap_content"
-                android:layout_height="36dp"
-                android:text="@string/btn_start"
-                android:textColor="@color/text_primary"
-                android:textSize="11sp"
-                android:background="@drawable/bg_control_button"
-                android:layout_marginStart="8dp"
-                android:paddingHorizontal="12dp" />
-
-            <Button
-                android:id="@+id/stripStopButton"
-                android:layout_width="wrap_content"
-                android:layout_height="36dp"
-                android:text="@string/btn_stop"
-                android:textColor="@color/text_primary"
-                android:textSize="11sp"
-                android:background="@drawable/bg_control_button"
-                android:layout_marginStart="4dp"
-                android:paddingHorizontal="12dp" />
-        </LinearLayout>
-
-        <!-- Transform section content (shown when XFM tab active) -->
-        <LinearLayout
-            android:id="@+id/stripTransformContent"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:gravity="center_vertical"
-            android:paddingHorizontal="8dp"
-            android:paddingVertical="6dp"
-            android:visibility="gone">
-
-            <CheckBox
-                android:id="@+id/stripMirrorCheckBox"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="@string/label_mirror"
-                android:textColor="@color/text_secondary"
-                android:textSize="13sp"
-                android:buttonTint="@color/hawkeye_primary" />
-
-            <CheckBox
-                android:id="@+id/stripFlipCheckBox"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginStart="16dp"
-                android:text="@string/label_flip"
-                android:textColor="@color/text_secondary"
-                android:textSize="13sp"
-                android:buttonTint="@color/hawkeye_primary" />
-        </LinearLayout>
-    </LinearLayout>
-
-    <!-- Bottom Action Bar - phone only, icon-only buttons -->
-    <LinearLayout
-        android:id="@+id/bottomBar"
+        android:id="@+id/topBar"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
         android:orientation="horizontal"
-        android:gravity="center"
+        android:paddingHorizontal="16dp"
+        android:paddingVertical="8dp"
+        android:gravity="center_vertical"
         android:background="@color/surface_dark"
         android:elevation="8dp"
-        android:paddingVertical="4dp"
-        android:paddingHorizontal="8dp"
-        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintTop_toTopOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent">
 
-        <!-- Capture Button -->
-        <LinearLayout
-            android:id="@+id/captureButton"
+        <!-- App Title -->
+        <TextView
+            android:id="@+id/appTitle"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:orientation="vertical"
-            android:gravity="center"
-            android:padding="6dp"
-            android:background="@drawable/bg_icon_button"
-            android:clickable="true"
-            android:focusable="true">
+            android:text="@string/app_name"
+            android:textColor="@color/text_primary"
+            android:textSize="18sp"
+            android:textStyle="bold" />
 
-            <ImageView
-                android:id="@+id/captureIcon"
-                android:layout_width="24dp"
-                android:layout_height="24dp"
-                android:src="@drawable/ic_camera"
-                app:tint="@color/text_secondary"
-                android:contentDescription="@string/btn_still" />
-
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="@string/btn_still"
-                android:textColor="@color/text_secondary"
-                android:textSize="9sp"
-                android:textAllCaps="true"
-                android:layout_marginTop="2dp"
-                android:visibility="gone" />
-        </LinearLayout>
-
-        <!-- Record Button -->
+        <!-- Icon Buttons Container -->
         <LinearLayout
-            android:id="@+id/recordButton"
-            android:layout_width="0dp"
+            android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:orientation="vertical"
-            android:gravity="center"
-            android:padding="6dp"
-            android:layout_marginStart="2dp"
-            android:background="@drawable/bg_icon_button"
-            android:clickable="true"
-            android:focusable="true">
+            android:orientation="horizontal"
+            android:gravity="center">
 
-            <ImageView
-                android:id="@+id/recordIcon"
-                android:layout_width="24dp"
-                android:layout_height="24dp"
-                android:src="@drawable/ic_videocam"
-                app:tint="@color/text_secondary"
-                android:contentDescription="@string/btn_video" />
-
-            <TextView
-                android:id="@+id/recordLabel"
+            <!-- Still/Capture Button -->
+            <LinearLayout
+                android:id="@+id/captureButton"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="@string/btn_video"
-                android:textColor="@color/text_secondary"
-                android:textSize="9sp"
-                android:textAllCaps="true"
-                android:layout_marginTop="2dp"
-                android:visibility="gone" />
-        </LinearLayout>
+                android:orientation="vertical"
+                android:gravity="center"
+                android:padding="8dp"
+                android:minWidth="72dp"
+                android:background="@drawable/bg_icon_button"
+                android:clickable="true"
+                android:focusable="true">
 
-        <!-- Gallery Button -->
-        <LinearLayout
-            android:id="@+id/galleryButton"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:orientation="vertical"
-            android:gravity="center"
-            android:padding="6dp"
-            android:layout_marginStart="2dp"
-            android:background="@drawable/bg_icon_button"
-            android:clickable="true"
-            android:focusable="true">
+                <ImageView
+                    android:id="@+id/captureIcon"
+                    android:layout_width="28dp"
+                    android:layout_height="28dp"
+                    android:src="@drawable/ic_camera"
+                    app:tint="@color/text_secondary"
+                    android:contentDescription="@string/btn_still" />
 
-            <ImageView
-                android:id="@+id/galleryIcon"
-                android:layout_width="24dp"
-                android:layout_height="24dp"
-                android:src="@drawable/ic_gallery"
-                app:tint="@color/text_secondary"
-                android:contentDescription="@string/btn_gallery" />
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/btn_still"
+                    android:textColor="@color/text_secondary"
+                    android:textSize="11sp"
+                    android:textAllCaps="true"
+                    android:layout_marginTop="4dp" />
+            </LinearLayout>
 
-            <TextView
+            <!-- Video/Record Button -->
+            <LinearLayout
+                android:id="@+id/recordButton"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="@string/btn_gallery"
-                android:textColor="@color/text_secondary"
-                android:textSize="9sp"
-                android:textAllCaps="true"
-                android:layout_marginTop="2dp" />
-        </LinearLayout>
+                android:orientation="vertical"
+                android:gravity="center"
+                android:padding="8dp"
+                android:minWidth="72dp"
+                android:layout_marginStart="4dp"
+                android:background="@drawable/bg_icon_button"
+                android:clickable="true"
+                android:focusable="true">
 
-        <!-- Zoom Button -->
-        <LinearLayout
-            android:id="@+id/zoomButton"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:orientation="vertical"
-            android:gravity="center"
-            android:padding="6dp"
-            android:layout_marginStart="2dp"
-            android:background="@drawable/bg_icon_button"
-            android:clickable="true"
-            android:focusable="true">
+                <ImageView
+                    android:id="@+id/recordIcon"
+                    android:layout_width="28dp"
+                    android:layout_height="28dp"
+                    android:src="@drawable/ic_videocam"
+                    app:tint="@color/text_secondary"
+                    android:contentDescription="@string/btn_video" />
 
-            <ImageView
-                android:id="@+id/zoomIcon"
-                android:layout_width="24dp"
-                android:layout_height="24dp"
-                android:src="@drawable/ic_zoom"
-                app:tint="@color/text_secondary"
-                android:contentDescription="@string/btn_zoom" />
+                <TextView
+                    android:id="@+id/recordLabel"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/btn_video"
+                    android:textColor="@color/text_secondary"
+                    android:textSize="11sp"
+                    android:textAllCaps="true"
+                    android:layout_marginTop="4dp" />
+            </LinearLayout>
 
-            <TextView
-                android:id="@+id/zoomLabel"
+            <!-- Gallery Button -->
+            <LinearLayout
+                android:id="@+id/galleryButton"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="@string/btn_zoom"
-                android:textColor="@color/text_secondary"
-                android:textSize="9sp"
-                android:textAllCaps="true"
-                android:layout_marginTop="2dp" />
-        </LinearLayout>
+                android:orientation="vertical"
+                android:gravity="center"
+                android:padding="8dp"
+                android:minWidth="72dp"
+                android:layout_marginStart="4dp"
+                android:background="@drawable/bg_icon_button"
+                android:clickable="true"
+                android:focusable="true">
 
-        <!-- Drag Button -->
-        <LinearLayout
-            android:id="@+id/dragButton"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:orientation="vertical"
-            android:gravity="center"
-            android:padding="6dp"
-            android:layout_marginStart="2dp"
-            android:background="@drawable/bg_icon_button"
-            android:clickable="true"
-            android:focusable="true">
+                <ImageView
+                    android:id="@+id/galleryIcon"
+                    android:layout_width="28dp"
+                    android:layout_height="28dp"
+                    android:src="@drawable/ic_gallery"
+                    app:tint="@color/text_secondary"
+                    android:contentDescription="@string/btn_gallery" />
 
-            <ImageView
-                android:id="@+id/dragIcon"
-                android:layout_width="24dp"
-                android:layout_height="24dp"
-                android:src="@drawable/ic_drag"
-                app:tint="@color/text_secondary"
-                android:contentDescription="@string/btn_drag" />
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/btn_gallery"
+                    android:textColor="@color/text_secondary"
+                    android:textSize="11sp"
+                    android:textAllCaps="true"
+                    android:layout_marginTop="4dp" />
+            </LinearLayout>
 
-            <TextView
-                android:id="@+id/dragLabel"
+            <!-- Zoom Button -->
+            <LinearLayout
+                android:id="@+id/zoomButton"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="@string/btn_drag"
-                android:textColor="@color/text_secondary"
-                android:textSize="9sp"
-                android:textAllCaps="true"
-                android:layout_marginTop="2dp" />
+                android:orientation="vertical"
+                android:gravity="center"
+                android:padding="8dp"
+                android:minWidth="72dp"
+                android:layout_marginStart="4dp"
+                android:background="@drawable/bg_icon_button"
+                android:clickable="true"
+                android:focusable="true">
+
+                <ImageView
+                    android:id="@+id/zoomIcon"
+                    android:layout_width="28dp"
+                    android:layout_height="28dp"
+                    android:src="@drawable/ic_zoom"
+                    app:tint="@color/text_secondary"
+                    android:contentDescription="@string/btn_zoom" />
+
+                <TextView
+                    android:id="@+id/zoomLabel"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/btn_zoom"
+                    android:textColor="@color/text_secondary"
+                    android:textSize="11sp"
+                    android:textAllCaps="true"
+                    android:layout_marginTop="4dp" />
+            </LinearLayout>
+
+            <!-- Drag Button -->
+            <LinearLayout
+                android:id="@+id/dragButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:gravity="center"
+                android:padding="8dp"
+                android:minWidth="72dp"
+                android:layout_marginStart="4dp"
+                android:background="@drawable/bg_icon_button"
+                android:clickable="true"
+                android:focusable="true">
+
+                <ImageView
+                    android:id="@+id/dragIcon"
+                    android:layout_width="28dp"
+                    android:layout_height="28dp"
+                    android:src="@drawable/ic_drag"
+                    app:tint="@color/text_secondary"
+                    android:contentDescription="@string/btn_drag" />
+
+                <TextView
+                    android:id="@+id/dragLabel"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/btn_drag"
+                    android:textColor="@color/text_secondary"
+                    android:textSize="11sp"
+                    android:textAllCaps="true"
+                    android:layout_marginTop="4dp" />
+            </LinearLayout>
+
+            <!-- Adjust/Settings Button -->
+            <LinearLayout
+                android:id="@+id/settingsButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:gravity="center"
+                android:padding="8dp"
+                android:minWidth="72dp"
+                android:layout_marginStart="4dp"
+                android:background="@drawable/bg_icon_button"
+                android:clickable="true"
+                android:focusable="true">
+
+                <ImageView
+                    android:id="@+id/settingsIcon"
+                    android:layout_width="28dp"
+                    android:layout_height="28dp"
+                    android:src="@drawable/ic_tune"
+                    app:tint="@color/text_secondary"
+                    android:contentDescription="@string/btn_adjust" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/btn_adjust"
+                    android:textColor="@color/text_secondary"
+                    android:textSize="11sp"
+                    android:textAllCaps="true"
+                    android:layout_marginTop="4dp" />
+            </LinearLayout>
+
         </LinearLayout>
     </LinearLayout>
 
-    <!-- Hidden controls panel - all seekbar IDs exist here for ViewBinding/data compatibility -->
-    <!-- On phone, the adjustStrip above handles the visible UI; this panel stores state -->
+    <!-- Control Panel (Drawer) - Overlays on right side -->
     <LinearLayout
         android:id="@+id/controlsPanel"
-        android:layout_width="0dp"
+        android:layout_width="255dp"
         android:layout_height="0dp"
         android:orientation="vertical"
-        android:visibility="gone"
+        android:background="@color/surface_dark"
+        android:elevation="8dp"
+        app:layout_constraintTop_toBottomOf="@id/topBar"
         app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toEndOf="parent">
+        app:layout_constraintEnd_toEndOf="parent"
+        android:visibility="gone">
 
         <ScrollView
             android:layout_width="match_parent"
@@ -568,6 +335,7 @@
                     android:orientation="vertical"
                     android:padding="10dp">
 
+                    <!-- Camera Name -->
                     <TextView
                         android:id="@+id/cameraNameText"
                         android:layout_width="match_parent"
@@ -578,6 +346,7 @@
                         android:ellipsize="end"
                         android:maxLines="2" />
 
+                    <!-- Camera Start/Stop -->
                     <LinearLayout
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
@@ -606,6 +375,7 @@
                             android:background="@drawable/bg_control_button" />
                     </LinearLayout>
 
+                    <!-- View Mode -->
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
@@ -668,6 +438,7 @@
                     android:orientation="vertical"
                     android:padding="10dp">
 
+                    <!-- Brightness -->
                     <LinearLayout
                         android:id="@+id/brightnessRow"
                         android:layout_width="match_parent"
@@ -705,6 +476,7 @@
                             android:gravity="end" />
                     </LinearLayout>
 
+                    <!-- Contrast -->
                     <LinearLayout
                         android:id="@+id/contrastRow"
                         android:layout_width="match_parent"
@@ -743,6 +515,7 @@
                             android:gravity="end" />
                     </LinearLayout>
 
+                    <!-- Saturation -->
                     <LinearLayout
                         android:id="@+id/saturationRow"
                         android:layout_width="match_parent"
@@ -781,6 +554,7 @@
                             android:gravity="end" />
                     </LinearLayout>
 
+                    <!-- Hue -->
                     <LinearLayout
                         android:id="@+id/hueRow"
                         android:layout_width="match_parent"
@@ -819,6 +593,7 @@
                             android:gravity="end" />
                     </LinearLayout>
 
+                    <!-- Gamma -->
                     <LinearLayout
                         android:id="@+id/gammaRow"
                         android:layout_width="match_parent"
@@ -857,6 +632,7 @@
                             android:gravity="end" />
                     </LinearLayout>
 
+                    <!-- Sharpness -->
                     <LinearLayout
                         android:id="@+id/sharpnessRow"
                         android:layout_width="match_parent"
@@ -895,6 +671,7 @@
                             android:gravity="end" />
                     </LinearLayout>
 
+                    <!-- Defaults Button -->
                     <Button
                         android:id="@+id/defaultsButton"
                         android:layout_width="match_parent"
@@ -948,6 +725,7 @@
                     android:orientation="vertical"
                     android:padding="10dp">
 
+                    <!-- Mirror and Flip -->
                     <LinearLayout
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
@@ -990,6 +768,28 @@
         </ScrollView>
     </LinearLayout>
 
+    <!-- Bottom Bar - not used on tablet, exists for ViewBinding compatibility -->
+    <LinearLayout
+        android:id="@+id/bottomBar"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:orientation="horizontal"
+        android:visibility="gone"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent" />
+
+    <!-- Compact adjust strip views - not used on tablet, exist for ViewBinding compatibility -->
+    <LinearLayout
+        android:id="@+id/adjustStrip"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:orientation="vertical"
+        android:visibility="gone"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent" />
+
     <!-- Status Message -->
     <TextView
         android:id="@+id/statusText"
@@ -1001,7 +801,7 @@
         android:textSize="14sp"
         android:elevation="8dp"
         android:visibility="gone"
-        app:layout_constraintBottom_toTopOf="@id/bottomBar"
+        app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         android:layout_margin="16dp"
         tools:text="Camera started"
