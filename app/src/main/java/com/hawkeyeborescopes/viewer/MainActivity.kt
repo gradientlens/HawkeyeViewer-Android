@@ -254,7 +254,8 @@ class MainActivity : CameraActivity() {
                         usbDevice = self.device,
                         onCapturePressed = { runOnUiThread { triggerHardwareCapture(fromHardwareButton = true) } },
                         onRecordPressed = { runOnUiThread { toggleRecording() } },
-                        writeLog = { msg2 -> writeLog(msg2) }
+                        writeLog = { msg2 -> writeLog(msg2) },
+                        armRollAtStartup = isPhone
                     )
                     if (buttonHelper?.start() != true) {
                         writeLog("UsbButtonHelper: failed to start hardware bridge")
@@ -315,7 +316,10 @@ class MainActivity : CameraActivity() {
     override fun initView() {
         super.initView()
         // Keep screen on while app is active — prevents sleep from killing camera
-        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        // Only on phone; tablet's USB hub is bandwidth-sensitive
+        if (isPhone) {
+            window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        }
         val sessionId = SimpleDateFormat("HHmmss", Locale.US).format(Date())
         writeLog("=== APP STARTING (libausbc 3.3.3) session=$sessionId ===")
 
@@ -907,8 +911,10 @@ class MainActivity : CameraActivity() {
         constraintSet.setDimensionRatio(R.id.cameraContainer, type.ratio)
         constraintSet.applyTo(constraintLayout)
 
-        // Force immediate layout pass (needed on phone where container is sandwiched between bars)
-        binding.cameraContainer.requestLayout()
+        // Force immediate layout pass on phone (container is sandwiched between bars)
+        if (isPhone) {
+            binding.cameraContainer.requestLayout()
+        }
 
         // Calculate and apply crop zoom from actual camera resolution
         val (cropX, cropY) = calcCropZoom(type)

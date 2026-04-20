@@ -30,7 +30,8 @@ class UsbButtonHelper(
     private val usbDevice: UsbDevice?,
     private val onCapturePressed: () -> Unit,
     private val onRecordPressed: () -> Unit,
-    private val writeLog: (String) -> Unit
+    private val writeLog: (String) -> Unit,
+    private val armRollAtStartup: Boolean = false
 ) {
     companion object {
         private const val TAG = "UsbButtonHelper"
@@ -150,8 +151,18 @@ class UsbButtonHelper(
         // Windows AmCap requires setting tilt to 0 before the button will register.
         // The default value is 3600 (0x0E10) which may be an "unarmed" state.
         armTiltForButtonDetection()
-        armRollForButtonDetection()
         startControlPolling()
+        // Arm roll to 0 on devices that need it (phone — tablet's roll starts at 0 naturally).
+        // Deferred 2s to avoid USB contention during video stream startup.
+        if (armRollAtStartup) {
+            Thread {
+                try { Thread.sleep(2000) } catch (_: InterruptedException) { return@Thread }
+                if (running.get()) {
+                    writeLog("$TAG: Deferred roll arm starting (2s after camera open)")
+                    armRollForButtonDetection()
+                }
+            }.start()
+        }
         startDiagnosticPollWindow("camera-open")
         return true
     }
